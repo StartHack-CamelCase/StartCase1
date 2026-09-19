@@ -4634,6 +4634,1748 @@
           ]
         }
       }
+    },
+    {
+      "scenario_id": "SCEN0002",
+      "decoding": {
+        "variables": [
+          {
+            "field": "authorization.authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.source_authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.scenario_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.replay_order",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.mandate_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.profile_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.card_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.initiator_type",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_name",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_category",
+            "status": "present",
+            "value": "specialist sports retailer",
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": "Buy only from a specialist sports retailer,",
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_mcc",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_country",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_city",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.availability",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.recurring_capable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.timestamp",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.amount",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.currency",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.billing_amount_chf",
+            "status": "present",
+            "value": 200,
+            "operator": "<=",
+            "currency": "CHF",
+            "scope": "purchase",
+            "period_days": null,
+            "source_excerpt": "and pay no more than CHF 200.",
+            "note": null
+          },
+          {
+            "field": "authorization.items_subtotal",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.delivery_fee",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.channel",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.customer_device_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.authority_status",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.card_status_at_attempt",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.spend_in_period_before_chf",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.recent_attempt_count_10m",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.fulfillment_method",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.delivery_by",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.order_returnable",
+            "status": "present",
+            "value": "true",
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": "only if the order can be returned within 14 days or more,",
+            "note": null
+          },
+          {
+            "field": "authorization.order_cancellable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.related_authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.related_authorization_status",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.purchase_description",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].line_no",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_name",
+            "status": "present",
+            "value": [
+              "road-running shoes"
+            ],
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": "Replace my worn road-running shoes in size 43.",
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_category",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].quantity",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].unit_price",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].currency",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_details",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "mandate.uncertainty_policy",
+            "status": "present",
+            "value": "ask",
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": "Ask me when uncertain.",
+            "note": null
+          },
+          {
+            "field": "context.approved_spend_in_period_chf",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          }
+        ],
+        "unmapped_requirements": [
+          {
+            "source_excerpt": "Replace my worn road-running shoes in size 43.",
+            "description": "Cardholder requests shoe size 43.",
+            "reason": "no_native_field"
+          },
+          {
+            "source_excerpt": "only if the order can be returned within 14 days or more,",
+            "description": "Order must be returnable within at least 14 days.",
+            "reason": "no_native_field"
+          }
+        ],
+        "decoding_id": "LOCAL_DEC_f471b167-c0df-44fb-ad61-2d0c6f750f50",
+        "instruction": "Replace my worn road-running shoes in size 43. Buy only from a specialist sports retailer, only if the order can be returned within 14 days or more, and pay no more than CHF 200. Ask me when uncertain.",
+        "schema_version": 1,
+        "prompt_version": "instruction-variables-v11",
+        "validation_version": "instruction-validation-v5",
+        "source_schema_hash": "49a5c23d17d9599a5b49f531f465ad399a018fb2c1403a8a7884dea418c25832",
+        "model_requested": "gpt-5.4-mini",
+        "model_returned": "gpt-5.4-mini-2026-03-17",
+        "response_id": "resp_00994a82b5f58515016aae281585b487d1a90cbfbdf66117e4",
+        "created_at": "2026-09-19T06:13:43.461Z",
+        "duration_ms": 2648,
+        "usage": {
+          "input_tokens": 3177,
+          "output_tokens": 346,
+          "reasoning_tokens": 0
+        },
+        "requirement_inventory": {
+          "version": "requirement-inventory-v1",
+          "requirements": [
+            {
+              "id": "48c0ed04a9e8c335",
+              "source_excerpt": "Replace my worn road-running shoes in size 43.",
+              "status": "mapped",
+              "mappings": [
+                "authorization.items[].item_name"
+              ],
+              "questions": []
+            },
+            {
+              "id": "4a6b6764321781e2",
+              "source_excerpt": "Buy only from a specialist sports retailer, only if the order can be returned within 14 days or more, and pay no more than CHF 200.",
+              "status": "mapped",
+              "mappings": [
+                "authorization.merchant.merchant_category",
+                "authorization.billing_amount_chf",
+                "authorization.order_returnable"
+              ],
+              "questions": []
+            },
+            {
+              "id": "4e964b13d71cf977",
+              "source_excerpt": "Ask me when uncertain.",
+              "status": "mapped",
+              "mappings": [
+                "mandate.uncertainty_policy"
+              ],
+              "questions": []
+            },
+            {
+              "id": "e4bc7c0ee1943215",
+              "source_excerpt": "shoes in size 43",
+              "status": "mapped",
+              "mappings": [
+                "authorization.items[].item_name"
+              ],
+              "questions": []
+            },
+            {
+              "id": "8a7739716d1d5a35",
+              "source_excerpt": "specialist sports retailer, only if the order can be returned within 14 days or more, and pay no more than CHF 200",
+              "status": "mapped",
+              "mappings": [
+                "authorization.order_returnable"
+              ],
+              "questions": []
+            },
+            {
+              "id": "65f1e0b2c4c92fd6",
+              "source_excerpt": "uncertain",
+              "status": "mapped",
+              "mappings": [
+                "mandate.uncertainty_policy"
+              ],
+              "questions": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "SCEN0003",
+      "decoding": {
+        "variables": [
+          {
+            "field": "authorization.authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.source_authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.scenario_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.replay_order",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.mandate_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.profile_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.card_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.initiator_type",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_name",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_category",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_mcc",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_country",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_city",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.availability",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.recurring_capable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.timestamp",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.amount",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.currency",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.billing_amount_chf",
+            "status": "present",
+            "value": 250,
+            "operator": "<=",
+            "currency": "CHF",
+            "scope": "purchase",
+            "period_days": null,
+            "source_excerpt": "up to CHF 250 per order,",
+            "note": null
+          },
+          {
+            "field": "authorization.items_subtotal",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.delivery_fee",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.channel",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.customer_device_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.authority_status",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.card_status_at_attempt",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.spend_in_period_before_chf",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.recent_attempt_count_10m",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.fulfillment_method",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.delivery_by",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.order_returnable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.order_cancellable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.related_authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.related_authorization_status",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.purchase_description",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].line_no",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_name",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_category",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].quantity",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].unit_price",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].currency",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_details",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "mandate.uncertainty_policy",
+            "status": "present",
+            "value": "ask",
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": "Ask me when uncertain.",
+            "note": null
+          },
+          {
+            "field": "context.approved_spend_in_period_chf",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          }
+        ],
+        "unmapped_requirements": [
+          {
+            "source_excerpt": "from shops I have used before.",
+            "description": "Merchant must be a shop the cardholder uses regularly",
+            "reason": "no_native_field"
+          },
+          {
+            "source_excerpt": "Pause anything that looks like someone other than me is driving the session.",
+            "description": "Pause if someone other than the cardholder appears to be driving the session",
+            "reason": "no_native_field"
+          }
+        ],
+        "decoding_id": "LOCAL_DEC_38fbbc61-e398-4662-8bf8-a0dd05420a31",
+        "instruction": "The agent may buy clothing for me, up to CHF 250 per order, from shops I have used before. Pause anything that looks like someone other than me is driving the session. Ask me when uncertain.",
+        "schema_version": 1,
+        "prompt_version": "instruction-variables-v11",
+        "validation_version": "instruction-validation-v5",
+        "source_schema_hash": "49a5c23d17d9599a5b49f531f465ad399a018fb2c1403a8a7884dea418c25832",
+        "model_requested": "gpt-5.4-mini",
+        "model_returned": "gpt-5.4-mini-2026-03-17",
+        "response_id": "resp_00d7b9e0afb0744c016aae284cf37487d1a6b092e6c325383c",
+        "created_at": "2026-09-19T06:14:39.009Z",
+        "duration_ms": 2249,
+        "usage": {
+          "input_tokens": 3152,
+          "output_tokens": 186,
+          "reasoning_tokens": 0
+        },
+        "requirement_inventory": {
+          "version": "requirement-inventory-v1",
+          "requirements": [
+            {
+              "id": "12b86dd390717877",
+              "source_excerpt": "The agent may buy clothing for me, up to CHF 250 per order, from shops I have used before.",
+              "status": "mapped",
+              "mappings": [
+                "authorization.billing_amount_chf"
+              ],
+              "questions": []
+            },
+            {
+              "id": "4d777293c003dd21",
+              "source_excerpt": "Pause anything that looks like someone other than me is driving the session.",
+              "status": "unmapped",
+              "mappings": [],
+              "questions": []
+            },
+            {
+              "id": "4e964b13d71cf977",
+              "source_excerpt": "Ask me when uncertain.",
+              "status": "mapped",
+              "mappings": [
+                "mandate.uncertainty_policy"
+              ],
+              "questions": []
+            },
+            {
+              "id": "593229a2f809ce36",
+              "source_excerpt": "session",
+              "status": "unmapped",
+              "mappings": [],
+              "questions": []
+            },
+            {
+              "id": "65f1e0b2c4c92fd6",
+              "source_excerpt": "uncertain",
+              "status": "mapped",
+              "mappings": [
+                "mandate.uncertainty_policy"
+              ],
+              "questions": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "SCEN0004",
+      "decoding": {
+        "variables": [
+          {
+            "field": "authorization.authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.source_authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.scenario_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.replay_order",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.mandate_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.profile_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.card_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.initiator_type",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_name",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_category",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_mcc",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_country",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.merchant_city",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.availability",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.merchant.recurring_capable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.timestamp",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.amount",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.currency",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.billing_amount_chf",
+            "status": "present",
+            "value": 400,
+            "operator": "<=",
+            "currency": "CHF",
+            "scope": "purchase",
+            "period_days": null,
+            "source_excerpt": "for CHF 400 or less.",
+            "note": null
+          },
+          {
+            "field": "authorization.items_subtotal",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.delivery_fee",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.channel",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.customer_device_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.authority_status",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.card_status_at_attempt",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.spend_in_period_before_chf",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.recent_attempt_count_10m",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.fulfillment_method",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.delivery_by",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.order_returnable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.order_cancellable",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.related_authorization_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.related_authorization_status",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.purchase_description",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].line_no",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_id",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_name",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_category",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].quantity",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].unit_price",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].currency",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "authorization.items[].item_details",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          },
+          {
+            "field": "mandate.uncertainty_policy",
+            "status": "present",
+            "value": "ask",
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": "Ask me when uncertain.",
+            "note": null
+          },
+          {
+            "field": "context.approved_spend_in_period_chf",
+            "status": "absent",
+            "value": null,
+            "operator": null,
+            "currency": null,
+            "scope": null,
+            "period_days": null,
+            "source_excerpt": null,
+            "note": null
+          }
+        ],
+        "unmapped_requirements": [
+          {
+            "source_excerpt": "Buy the 27-inch monitor I chose,",
+            "description": "Requested product is a 27-inch monitor the cardholder chose.",
+            "reason": "ambiguous"
+          },
+          {
+            "source_excerpt": "from a seller I have bought from before,",
+            "description": "Merchant must be a seller the cardholder has bought from before.",
+            "reason": "ambiguous"
+          }
+        ],
+        "decoding_id": "LOCAL_DEC_aa4fd332-8258-4274-a893-2bde33fc8243",
+        "instruction": "Buy the 27-inch monitor I chose, from a seller I have bought from before, for CHF 400 or less. Do not add anything I did not ask for. Ask me when uncertain.",
+        "schema_version": 1,
+        "prompt_version": "instruction-variables-v11",
+        "validation_version": "instruction-validation-v5",
+        "source_schema_hash": "49a5c23d17d9599a5b49f531f465ad399a018fb2c1403a8a7884dea418c25832",
+        "model_requested": "gpt-5.4-mini",
+        "model_returned": "gpt-5.4-mini-2026-03-17",
+        "response_id": "resp_074b934b50806881016aae4471bc6087d1ac0dc440e563e9f8",
+        "created_at": "2026-09-19T08:14:43.055Z",
+        "duration_ms": 2111,
+        "usage": {
+          "input_tokens": 3142,
+          "output_tokens": 181,
+          "reasoning_tokens": 0
+        },
+        "requirement_inventory": {
+          "version": "requirement-inventory-v1",
+          "requirements": [
+            {
+              "id": "b3b76e6c0ff1dfd2",
+              "source_excerpt": "Buy the 27-inch monitor I chose, from a seller I have bought from before, for CHF 400 or less.",
+              "status": "uncertain",
+              "mappings": [
+                "authorization.billing_amount_chf"
+              ],
+              "questions": [
+                "Cette exigence doit-elle être précisée ou confirmée ?"
+              ]
+            },
+            {
+              "id": "c3772025101108c6",
+              "source_excerpt": "Do not add anything I did not ask for.",
+              "status": "uncovered",
+              "mappings": [],
+              "questions": [
+                "Cette exigence doit-elle être précisée ou confirmée ?"
+              ]
+            },
+            {
+              "id": "4e964b13d71cf977",
+              "source_excerpt": "Ask me when uncertain.",
+              "status": "mapped",
+              "mappings": [
+                "mandate.uncertainty_policy"
+              ],
+              "questions": []
+            },
+            {
+              "id": "65f1e0b2c4c92fd6",
+              "source_excerpt": "uncertain",
+              "status": "mapped",
+              "mappings": [
+                "mandate.uncertainty_policy"
+              ],
+              "questions": []
+            }
+          ]
+        }
+      }
     }
   ]
 }

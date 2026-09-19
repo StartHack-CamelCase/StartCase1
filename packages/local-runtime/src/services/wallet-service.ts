@@ -24,7 +24,7 @@ import { LiveSessionService } from './live-session-service.js';
 import { liveConnectionFromEnv, type LiveConnectionOptions } from './live-configuration.js';
 
 // Version of local permission compilation, independent of the model prompt.
-export const WALLET_PERMISSION_COMPILER_VERSION='wallet-permissions-merged-v4';
+export const WALLET_PERMISSION_COMPILER_VERSION='wallet-permissions-merged-v5';
 type Dependencies={pack:DataPack;policies:PolicyService;simulations:SimulationService;instructions:InstructionDecodingService};
 export type LiveHumanResponse={authorization_id:string;decision:'approve'|'decline';offer_hash?:string;expected_revision?:number;answers:Array<{question_id:string;value:string;source_ref?:string;source_excerpt?:string}>};
 export type HumanResponseRecovery={status:'settled'|'abandoned'|'pending';result?:WalletRunView};

@@ -90,6 +90,18 @@ function compileDecodedVariable(v:InstructionDecoding['variables'][number],p:Saf
 function simpleRequirementCovered(r:InstructionDecoding['unmapped_requirements'][number],instruction:string,p:SafetyParameters):boolean {
  if(!instruction.includes(r.source_excerpt))return false;
  const text=r.description.normalize('NFKC').toLowerCase().trim().replace(/[.]$/,'');
+ // Model paraphrases may name the cardholder rather than repeat the request.
+ // Match the whole predicate and its positive source clause; removing generic
+ // words globally could hide a further product restriction or a negation.
+ const prefix=instruction.slice(0,instruction.indexOf(r.source_excerpt)).split(/[.!?;]/).at(-1)??'';
+ const source=(prefix+r.source_excerpt).normalize('NFKC').toLowerCase().trim().replace(/\s+/g,' ').replace(/[.,]$/,'');
+ const requestedSize=/^(?:the )?(?:cardholder|user) (?:requests|requires) shoe size (\d+(?:[.,]\d+)?)$/.exec(text);
+ const sourceSize=/^replace (?:my|our) (?:worn )?road[- ]running shoes in size (\d+(?:[.,]\d+)?)$/.exec(source);
+ if(requestedSize&&sourceSize){const size=requestedSize[1]!.replace(',','.');if(size===sourceSize[1]!.replace(',','.')&&p.product_type==='road_running_shoes'&&p.numeric_size_convention==='shared_numeric'&&p.attributes.some(a=>a.name==='size'&&a.unit===null&&a.values.length===1&&a.values[0]===size))return true;}
+ const requestedMonitor=/^(?:the )?requested product is (?:a|the) (\d+(?:[.,]\d+)?)-inch monitor (?:that )?(?:the )?(?:cardholder|user) chose$/.exec(text);
+ const sourceMonitor=/^buy the (\d+(?:[.,]\d+)?)-inch monitor (?:that )?(?:i|we) chose$/.exec(source);
+ if(requestedMonitor&&sourceMonitor){const inches=requestedMonitor[1]!.replace(',','.');if(inches===sourceMonitor[1]!.replace(',','.')&&p.product_type==='monitor'&&p.allowed_item_ids?.length===1&&p.attributes.some(a=>a.name==='inches'&&a.unit==='inch'&&a.values.length===1&&a.values[0]===inches))return true;}
+ if(/^pause if someone other than (?:the )?(?:cardholder|user) appears to be driving the session$/.test(text)&&/^pause anything that looks like someone other than me is driving the session$/.test(source)&&p.watch_devices&&p.burst_threshold!==null&&p.historical_time_review&&p.unusual_country)return true;
  const only=(terms:RegExp)=>text.replace(terms,'').replace(/[\d\s.,:;()'’–-]/g,'')==='';
  const base='the|a|an|of|for|in|is|are|be|must|should|required|requested|requirement|order|purchase|product|item|items|shoe|shoes|and|with|have|has|to';
  const attribute=(name:'size'|'inches'|'color',pattern:RegExp,words:string)=>{

@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -60,6 +61,25 @@ async function setup(scenarioId='SCEN0000',sourceInstruction=instruction){
 }
 
 describe('refreshing stale unconfirmed permission JSON',()=>{
+ it.each([
+  ['SCEN0002','LOCAL_DEC_f471b167-c0df-44fb-ad61-2d0c6f750f50'],
+  ['SCEN0003','LOCAL_DEC_38fbbc61-e398-4662-8bf8-a0dd05420a31'],
+  ['SCEN0004','LOCAL_DEC_aa4fd332-8258-4274-a893-2bde33fc8243'],
+ ])('repairs the saved %s cardholder paraphrase without calling AI again',async(scenarioId,decodingId)=>{
+  const fixtures=JSON.parse(readFileSync(new URL('./fixtures/wallet-official-decodings.json',import.meta.url),'utf8')) as {observed_variants:Array<{decoding:InstructionDecoding}>};
+  const decoding=fixtures.observed_variants.find(s=>s.decoding.decoding_id===decodingId)!.decoding;
+  const x=await setup(scenarioId,decoding.instruction);
+  x.legacy.compiler_version='wallet-permissions-merged-v4';x.legacy.decoding=structuredClone(decoding);x.save(x.legacy);
+  const refreshed=(await x.get()).json<WalletPreparation>();
+  expect(refreshed.compiler_version).toBe(WALLET_PERMISSION_COMPILER_VERSION);
+  expect(refreshed.clarifications).toEqual([]);
+  expect(refreshed.decoding).toEqual(decoding);
+  const started=await x.confirm(refreshed.config!.parameters);expect(started.statusCode,started.body).toBe(200);
+  const run=(await x.app.inject(`/api/wallet/runs/${started.json().run_id}`)).json<WalletRunView>();
+  expect(run.config.parameters).toEqual(refreshed.config!.parameters);
+  expect(x.decode).not.toHaveBeenCalled();
+ });
+
  it('repairs a saved v1 household review and starts with both budgets and delivery intact',async()=>{
   const household='Order our household groceries for delivery. Keep each order at or below CHF 120 including delivery, and keep the total across any seven days at or below CHF 300. Ask me when uncertain.';
   const x=await setup('SCEN0001',household);
