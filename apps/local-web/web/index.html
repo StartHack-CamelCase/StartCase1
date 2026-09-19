@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Viseca wallet control for clear, reviewable spending permissions."
+    />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#102533" />
+    <title>Wallet control · Viseca</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="app-header">
+      <div class="app-header__inner">
+        <a class="brand" href="/" aria-label="Viseca wallet control home">
+          <img
+            class="brand__logo"
+            src="/static/assets/logos/viseca-dark.png"
+            alt="Viseca"
+            width="130"
+            height="30"
+          />
+          <span class="brand__separator" aria-hidden="true"></span>
+          <span class="brand__product">Wallet control</span>
+        </a>
+
+        <nav class="primary-nav" aria-label="Main navigation">
+          <a id="nav-scenarios" href="/">Wallet</a>
+          <span class="offline-pill">
+            <span class="offline-pill__dot" aria-hidden="true"></span>
+            Local simulation
+          </span>
+        </nav>
+      </div>
+    </header>
+
+    <div id="flash-region" class="flash-region" aria-live="polite" aria-atomic="true"></div>
+
+    <main id="main-content" class="main-shell" tabindex="-1">
+      <div id="app" aria-live="polite" aria-busy="true"></div>
+    </main>
+
+    <footer class="app-footer">
+      <div class="app-footer__inner">
+        <p>Synthetic data · Local execution · No real payments</p>
+      </div>
+    </footer>
+
+    <noscript>
+        <div class="noscript-message">
+      JavaScript is required to use wallet control.
+      </div>
+    </noscript>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

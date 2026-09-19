@@ -1,0 +1,29 @@
+import { describe, expect, it } from 'vitest';
+import { loadDataPack } from '../packages/local-runtime/src/data/index.js';
+import { evaluateCustomer } from '../packages/local-runtime/src/simulation/customer.js';
+import type { AuthorizationEvent } from '../packages/contracts/src/event.js';
+import { defaultParameters } from '../packages/local-runtime/src/simulation/config.js';
+import { evaluateMerchant } from '../packages/local-runtime/src/simulation/merchant.js';
+import type { EvaluationContext } from '../packages/local-runtime/src/simulation/common.js';
+const root=process.cwd();
+async function base(id='AU0004'){const pack=await loadDataPack({dataDir:`${root}/data`});const a=pack.attempts.find(x=>x.authorization_id===id)!;const m=pack.merchantsById.get(a.merchant_id)!;const auth=pack.authoritiesById.get(a.authority_id)!;const items=(pack.itemsByAttempt.get(a.authorization_id)??[]).map(x=>({...x,unit_price:Number(x.unit_price)}));const event={authorization:{...a,authorization_id:`LOCAL_${id}`,source_authorization_id:id,mandate_id:'M',profile_id:'P',merchant:m,amount:Number(a.amount),billing_amount_chf:Number(a.billing_amount_chf),items,customer_device_id:a.customer_device_id??'',items_subtotal:Number(a.items_subtotal),delivery_fee:Number(a.delivery_fee)},mandate:{mandate_id:'M',status:'active',customer_id:auth.customer_id,card_id:a.card_id,instruction:'',hard_rules:[],uncertainty_policy:'ask',profile_id:'P'},type:'authorization.request',request_id:'R',deadline_at:a.timestamp,context:{approved_spend_in_period_chf:null,recent_authorizations:[]},runtime:{received_at:a.timestamp,history_window_minutes:10,context_basis:'run_decisions_and_scenario_timestamps'}} as unknown as AuthorizationEvent;const config:any={schema_version:1,config_id:'C',mandate_id:'M',mandate_version:1,revision:1,instruction_hash:'',status:'confirmed',requirements:[{status:'confirmed'}],parameters:defaultParameters()};const run:any={history:pack.history,purchases:[],commitments:[],reservations:[],budget_scope_id:'B',customer_id:auth.customer_id,mandate_snapshot:event.mandate,status:'active'};return {ctx:{pack,event,config,run,now:a.timestamp,offer_hash:'',answers:[],phase:'assess'},pack,event,config,run};}
+async function one(id:string, mutate:(x:Awaited<ReturnType<typeof base>>)=>void=()=>{}){const x=await base(id);mutate(x);const merchant=evaluateMerchant(x.ctx as EvaluationContext);return evaluateCustomer(x.ctx as EvaluationContext,merchant);}
+const out=(r:any,id:string)=>r.find((x:any)=>x.filter_id===id)!;
+describe('customer filters',()=>{
+ it('has all 22 slots',async()=>expect((await one('AU0004')).length).toBe(22));
+ it('account limit fails',async()=>expect(out(await one('AU0004',x=>x.config.parameters.max_order_chf='0'),'C09').outcome).toBe('fail'));
+ it('rolling insertion future is counted',async()=>expect(out(await one('AU0004',x=>{x.config.parameters.rolling_budget={limit_chf:'1',days:7};x.run.commitments=[{amount_chf:'100',timestamp:'2999-01-01T00:00:00Z',quantity:1,budget_scope_id:'B'}]}),'C10').outcome).toBe('fail'));
+ it('reservation within budget passes',async()=>expect(out(await one('AU0004',x=>{x.config.parameters.rolling_budget={limit_chf:'1000',days:7};x.run.reservations=[{amount_chf:'1',offer_hash:'x'}]}),'C12').outcome).toBe('pass'));
+ it('two reservations over budget review',async()=>expect(out(await one('AU0004',x=>{x.config.parameters.rolling_budget={limit_chf:'100',days:7};x.run.reservations=[{amount_chf:'80',offer_hash:'x',expires_at:'2999-01-01T00:00:00Z',authorization_id:'r1',timestamp:x.event.authorization.timestamp,quantity:1,budget_scope_id:'B'},{amount_chf:'80',offer_hash:'y',expires_at:'2999-01-01T00:00:00Z',authorization_id:'r2',timestamp:x.event.authorization.timestamp,quantity:1,budget_scope_id:'B'}]}),'C12').outcome).toBe('needs_review'));
+ it('empty requirements do not pass C03',async()=>expect(out(await one('AU0004',x=>x.config.requirements=[]),'C03').outcome).toBe('needs_review'));
+ it('account purpose mismatch reviews',async()=>expect(out(await one('AU0004',x=>x.config.parameters.account_purpose='household'),'C08').outcome).toBe('needs_review'));
+ it('C18 disabled is NA',async()=>expect(out(await one('AU0004'),'C18').outcome).toBe('not_applicable'));
+ it('C19 disabled is NA',async()=>expect(out(await one('AU0004'),'C19').outcome).toBe('not_applicable'));
+ it('C20 disabled is NA',async()=>expect(out(await one('AU0004'),'C20').outcome).toBe('not_applicable'));
+ it('C22 disabled is NA',async()=>expect(out(await one('AU0004'),'C22').outcome).toBe('not_applicable'));
+ it('C15 new device reviews',async()=>expect(out(await one('AU0004',x=>{x.config.parameters.watch_devices=true;x.event.authorization.customer_device_id='new'}),'C15').outcome).toBe('needs_review'));
+ it('C16 recalculates source attempts',async()=>expect(out(await one('AU0004',x=>{x.config.parameters.burst_threshold=1;x.event.authorization.recent_attempt_count_10m=1}),'C16').outcome).toBe('needs_review'));
+ it('C13 ignores marketing text when structured basket is identical',async()=>expect(out(await one('AU0004',x=>{x.config.parameters.duplicate_hours=24;const prior=structuredClone(x.event);prior.authorization.authorization_id='PRIOR' as never;prior.authorization.timestamp=new Date(Date.parse(x.event.authorization.timestamp)-3600000).toISOString();prior.authorization.items[0]!.item_details='different marketing text';x.run.purchases=[{event:prior,assessments:[{execution_state:'approved'} as never],answers:[]}]}),'C13').outcome).toBe('needs_review'));
+ it('C06 active international capability passes without domestic convention',async()=>expect(out(await one('AU0004'),'C06').outcome).toBe('pass'));
+ it('C04 blocked snapshot fails',async()=>expect(out(await one('AU0004',x=>x.event.authorization.card_status_at_attempt='blocked'),'C04').outcome).toBe('fail'));
+});

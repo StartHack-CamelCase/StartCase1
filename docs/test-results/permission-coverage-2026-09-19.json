@@ -1,0 +1,570 @@
+{
+  "checked_at": "2026-09-19T05:53:40.452Z",
+  "mode": "isolated local simulation",
+  "compiler_version": "wallet-permissions-v3",
+  "tests": 353,
+  "scenarios": [
+    {
+      "scenario_id": "SCEN0001",
+      "run_id": "SIM_ce3b085d-e0b3-4682-995e-bb67db2b89e6",
+      "prompt_version": "instruction-variables-v11",
+      "decoding_id": "LOCAL_DEC_cfad5f9c-0dc9-4d43-8cb7-ecd638690b98",
+      "parameters": {
+        "min_order_chf": null,
+        "max_order_chf": "120",
+        "rolling_budget": {
+          "days": 7,
+          "limit_chf": "300"
+        },
+        "daily_budget_chf": null,
+        "monthly_budget_chf": null,
+        "allowed_currencies": null,
+        "allowed_merchant_ids": null,
+        "blocked_merchant_ids": [],
+        "allowed_merchant_categories": null,
+        "allowed_merchant_countries": null,
+        "familiar_merchant": false,
+        "bounded_history_required": false,
+        "regularity": null,
+        "allowed_item_categories": [
+          "groceries",
+          "household"
+        ],
+        "allowed_item_ids": null,
+        "product_type": null,
+        "attributes": [],
+        "numeric_size_convention": null,
+        "no_extras": false,
+        "max_quantity_per_order": null,
+        "mission_quantity": null,
+        "min_return_days": null,
+        "require_cancellation": false,
+        "fulfillment_method": "delivery",
+        "delivery_deadline": null,
+        "forbid_recurring": false,
+        "domestic_country": "CH",
+        "account_purpose": null,
+        "watch_devices": false,
+        "burst_threshold": null,
+        "duplicate_hours": 24,
+        "time_review": null,
+        "historical_time_review": false,
+        "unusual_country": false,
+        "unusual_amount": false,
+        "preference_categories": [],
+        "always_ask": false,
+        "autonomous_limit_chf": null,
+        "consent_ttl_seconds": 120,
+        "timezone": "Europe/Zurich"
+      },
+      "approved_chf": "387.50",
+      "purchases": [
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0002",
+          "amount_chf": "44.5",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0003",
+          "amount_chf": "120",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0004",
+          "amount_chf": "126",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0005",
+          "amount_chf": "70",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0006",
+          "amount_chf": "65",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0007",
+          "amount_chf": "62",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0008",
+          "amount_chf": "65.5",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0009",
+          "amount_chf": "24",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0010",
+          "amount_chf": "138",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_ce3b085d-e0b3-4682-995e-bb67db2b89e6_AU0011",
+          "amount_chf": "88",
+          "state": "approved",
+          "decision": "approve"
+        }
+      ]
+    },
+    {
+      "scenario_id": "SCEN0002",
+      "run_id": "SIM_d7b0f7ff-21ac-45e8-af05-93929c47427a",
+      "prompt_version": "instruction-variables-v11",
+      "decoding_id": "LOCAL_DEC_1e50403b-d0a8-4c44-a977-5921087c2de7",
+      "parameters": {
+        "min_order_chf": null,
+        "max_order_chf": "200",
+        "rolling_budget": null,
+        "daily_budget_chf": null,
+        "monthly_budget_chf": null,
+        "allowed_currencies": null,
+        "allowed_merchant_ids": null,
+        "blocked_merchant_ids": [],
+        "allowed_merchant_categories": [
+          "sporting_goods"
+        ],
+        "allowed_merchant_countries": null,
+        "familiar_merchant": false,
+        "bounded_history_required": false,
+        "regularity": null,
+        "allowed_item_categories": [
+          "sporting_goods"
+        ],
+        "allowed_item_ids": null,
+        "product_type": "road_running_shoes",
+        "attributes": [
+          {
+            "name": "size",
+            "values": [
+              "43"
+            ],
+            "unit": null
+          }
+        ],
+        "numeric_size_convention": "shared_numeric",
+        "no_extras": false,
+        "max_quantity_per_order": 1,
+        "mission_quantity": 1,
+        "min_return_days": 14,
+        "require_cancellation": false,
+        "fulfillment_method": null,
+        "delivery_deadline": null,
+        "forbid_recurring": false,
+        "domestic_country": "CH",
+        "account_purpose": null,
+        "watch_devices": false,
+        "burst_threshold": null,
+        "duplicate_hours": 24,
+        "time_review": null,
+        "historical_time_review": false,
+        "unusual_country": false,
+        "unusual_amount": false,
+        "preference_categories": [],
+        "always_ask": false,
+        "autonomous_limit_chf": null,
+        "consent_ttl_seconds": 120,
+        "timezone": "Europe/Zurich"
+      },
+      "approved_chf": "165.00",
+      "purchases": [
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0012",
+          "amount_chf": "165",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0013",
+          "amount_chf": "155",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0014",
+          "amount_chf": "145",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0015",
+          "amount_chf": "158",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0016",
+          "amount_chf": "175",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0017",
+          "amount_chf": "180",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0018",
+          "amount_chf": "194",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0019",
+          "amount_chf": "168",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0020",
+          "amount_chf": "120",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0021",
+          "amount_chf": "215",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0022",
+          "amount_chf": "189",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_d7b0f7ff-21ac-45e8-af05-93929c47427a_AU0023",
+          "amount_chf": "179",
+          "state": "declined",
+          "decision": "deny"
+        }
+      ]
+    },
+    {
+      "scenario_id": "SCEN0004",
+      "run_id": "SIM_f68ca7f2-287a-40af-b3d0-206df968a623",
+      "prompt_version": "instruction-variables-v11",
+      "decoding_id": "LOCAL_DEC_f92c91ee-7ba4-4235-83c9-b0762111a191",
+      "parameters": {
+        "min_order_chf": null,
+        "max_order_chf": "400",
+        "rolling_budget": null,
+        "daily_budget_chf": null,
+        "monthly_budget_chf": null,
+        "allowed_currencies": null,
+        "allowed_merchant_ids": null,
+        "blocked_merchant_ids": [],
+        "allowed_merchant_categories": null,
+        "allowed_merchant_countries": null,
+        "familiar_merchant": true,
+        "bounded_history_required": false,
+        "regularity": null,
+        "allowed_item_categories": [
+          "electronics"
+        ],
+        "allowed_item_ids": [
+          "IT0017"
+        ],
+        "product_type": "monitor",
+        "attributes": [
+          {
+            "name": "inches",
+            "values": [
+              "27"
+            ],
+            "unit": "inch"
+          }
+        ],
+        "numeric_size_convention": null,
+        "no_extras": true,
+        "max_quantity_per_order": 1,
+        "mission_quantity": 1,
+        "min_return_days": null,
+        "require_cancellation": false,
+        "fulfillment_method": null,
+        "delivery_deadline": null,
+        "forbid_recurring": false,
+        "domestic_country": "CH",
+        "account_purpose": null,
+        "watch_devices": false,
+        "burst_threshold": null,
+        "duplicate_hours": 24,
+        "time_review": null,
+        "historical_time_review": false,
+        "unusual_country": false,
+        "unusual_amount": false,
+        "preference_categories": [],
+        "always_ask": false,
+        "autonomous_limit_chf": null,
+        "consent_ttl_seconds": 120,
+        "timezone": "Europe/Zurich"
+      },
+      "approved_chf": "289.00",
+      "purchases": [
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0035",
+          "amount_chf": "289",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0036",
+          "amount_chf": "289",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0037",
+          "amount_chf": "520",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0038",
+          "amount_chf": "391.5",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0039",
+          "amount_chf": "340",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0040",
+          "amount_chf": "299",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0041",
+          "amount_chf": "459",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0042",
+          "amount_chf": "350",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0043",
+          "amount_chf": "195",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0044",
+          "amount_chf": "310",
+          "state": "declined",
+          "decision": "deny"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_f68ca7f2-287a-40af-b3d0-206df968a623_AU0045",
+          "amount_chf": "399.9",
+          "state": "declined",
+          "decision": "deny"
+        }
+      ]
+    },
+    {
+      "scenario_id": "SCEN0000",
+      "run_id": "SIM_8c291e6c-3148-4fc0-b1d3-8ea1950fd53f",
+      "prompt_version": "instruction-variables-v11",
+      "decoding_id": "LOCAL_DEC_b242b2a3-e0ff-49bf-b641-b1ef4292beb6",
+      "parameters": {
+        "min_order_chf": null,
+        "max_order_chf": "20",
+        "rolling_budget": null,
+        "daily_budget_chf": null,
+        "monthly_budget_chf": null,
+        "allowed_currencies": null,
+        "allowed_merchant_ids": null,
+        "blocked_merchant_ids": [],
+        "allowed_merchant_categories": null,
+        "allowed_merchant_countries": null,
+        "familiar_merchant": false,
+        "bounded_history_required": false,
+        "regularity": {
+          "days": 180,
+          "distinct_dates": 3
+        },
+        "allowed_item_categories": [
+          "groceries"
+        ],
+        "allowed_item_ids": null,
+        "product_type": null,
+        "attributes": [],
+        "numeric_size_convention": null,
+        "no_extras": false,
+        "max_quantity_per_order": 1,
+        "mission_quantity": null,
+        "min_return_days": null,
+        "require_cancellation": false,
+        "fulfillment_method": null,
+        "delivery_deadline": null,
+        "forbid_recurring": false,
+        "domestic_country": "CH",
+        "account_purpose": null,
+        "watch_devices": false,
+        "burst_threshold": null,
+        "duplicate_hours": 24,
+        "time_review": null,
+        "historical_time_review": false,
+        "unusual_country": false,
+        "unusual_amount": false,
+        "preference_categories": [],
+        "always_ask": false,
+        "autonomous_limit_chf": null,
+        "consent_ttl_seconds": 120,
+        "timezone": "Europe/Zurich"
+      },
+      "approved_chf": "20.00",
+      "purchases": [
+        {
+          "authorization_id": "LOCAL_AUTH_8c291e6c-3148-4fc0-b1d3-8ea1950fd53f_AU0001",
+          "amount_chf": "20",
+          "state": "approved",
+          "decision": "approve"
+        }
+      ]
+    },
+    {
+      "scenario_id": "SCEN0003",
+      "run_id": "SIM_b92bfb63-e66b-4e3f-81a4-91818eca2b8f",
+      "prompt_version": "instruction-variables-v11",
+      "decoding_id": "LOCAL_DEC_1888e6f8-4742-457f-8fd6-bf94ea82051e",
+      "parameters": {
+        "min_order_chf": null,
+        "max_order_chf": "250",
+        "rolling_budget": null,
+        "daily_budget_chf": null,
+        "monthly_budget_chf": null,
+        "allowed_currencies": null,
+        "allowed_merchant_ids": null,
+        "blocked_merchant_ids": [],
+        "allowed_merchant_categories": null,
+        "allowed_merchant_countries": null,
+        "familiar_merchant": true,
+        "bounded_history_required": false,
+        "regularity": null,
+        "allowed_item_categories": [
+          "clothing"
+        ],
+        "allowed_item_ids": null,
+        "product_type": null,
+        "attributes": [],
+        "numeric_size_convention": null,
+        "no_extras": false,
+        "max_quantity_per_order": null,
+        "mission_quantity": null,
+        "min_return_days": null,
+        "require_cancellation": false,
+        "fulfillment_method": null,
+        "delivery_deadline": null,
+        "forbid_recurring": false,
+        "domestic_country": "CH",
+        "account_purpose": null,
+        "watch_devices": true,
+        "burst_threshold": 3,
+        "duplicate_hours": 24,
+        "time_review": null,
+        "historical_time_review": true,
+        "unusual_country": true,
+        "unusual_amount": false,
+        "preference_categories": [],
+        "always_ask": false,
+        "autonomous_limit_chf": null,
+        "consent_ttl_seconds": 120,
+        "timezone": "Europe/Zurich"
+      },
+      "approved_chf": "841.05",
+      "purchases": [
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0024",
+          "amount_chf": "145",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0025",
+          "amount_chf": "189.05",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0026",
+          "amount_chf": "165",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0027",
+          "amount_chf": "232",
+          "state": "cancelled",
+          "decision": null
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0028",
+          "amount_chf": "245",
+          "state": "awaiting_user",
+          "decision": "step_up"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0029",
+          "amount_chf": "245.28",
+          "state": "awaiting_user",
+          "decision": "step_up"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0030",
+          "amount_chf": "248",
+          "state": "awaiting_user",
+          "decision": "step_up"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0031",
+          "amount_chf": "95",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0032",
+          "amount_chf": "247",
+          "state": "approved",
+          "decision": "approve"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0033",
+          "amount_chf": "138",
+          "state": "awaiting_user",
+          "decision": "step_up"
+        },
+        {
+          "authorization_id": "LOCAL_AUTH_b92bfb63-e66b-4e3f-81a4-91818eca2b8f_AU0034",
+          "amount_chf": "268",
+          "state": "declined",
+          "decision": "deny"
+        }
+      ]
+    }
+  ]
+}

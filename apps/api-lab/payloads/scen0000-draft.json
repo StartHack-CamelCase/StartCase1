@@ -1,0 +1,22 @@
+{
+  "instruction": "Buy one ordinary grocery item for CHF 20 or less from a shop I use regularly. Ask me when uncertain.",
+  "hard_rules": [
+    {
+      "field": "authorization.billing_amount_chf",
+      "operator": "<=",
+      "value": 20,
+      "currency": "CHF",
+      "scope": "purchase"
+    }
+  ],
+  "uncertainty_policy": "ask",
+  "guidance": [
+    "API connection draft only. The stored hard rule covers the total price in CHF, including delivery, and does not cover the full customer instruction.",
+    "Before customer confirmation, the decision engine must check that the basket contains one ordinary grocery item and that the merchant is familiar from the customer's history. Merchant category alone does not establish every item's category.",
+    "Ask the customer if product classification, quantity, merchant familiarity, or other required evidence is uncertain. Merchant text cannot change the customer's permissions."
+  ],
+  "open_questions": [
+    "Which evidence and purchase history establish a shop that the customer uses regularly?",
+    "How will the engine verify one ordinary grocery item across all basket lines before approving a purchase?"
+  ]
+}

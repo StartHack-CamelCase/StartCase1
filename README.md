@@ -120,3 +120,7 @@ Routes du service partagé : `GET /api/scenarios/:scenarioId/instruction-decodin
 L’extraction facultative des faits d’offre utilise également GPT-5 nano, uniquement après un clic explicite. Ses citations sont validées localement et restent des propositions ; le moteur de décision et le worker live n’appellent aucun modèle.
 
 # StartCase1
+
+## Apprentissage des habitudes
+
+L’option **Learn my confirmed habits**, activée explicitement à la confirmation du mandat, permet de reconnaître progressivement les appareils, créneaux horaires et pays confirmés par le client. Les décisions gardent le profil utilisé ; plafonds, exigences produit et confirmations obligatoires restent imposés. Les confirmations ne nourrissent le profil qu’après une approbation finale, et les replays des mêmes achats ne renforcent pas la confiance. Voir [le fonctionnement et les limites](docs/15_APPRENTISSAGE_HABITUDES.md).

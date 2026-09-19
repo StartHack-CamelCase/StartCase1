@@ -1,0 +1,42 @@
+{
+  "name": "viseca-2026-local-inspector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.15.0 <25",
+    "pnpm": "11.19.0"
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ./node_modules/vitest/vitest.mjs",
+    "offline:validate-data": "node --import tsx ./apps/offline-runner/src/main.ts validate-data",
+    "offline:inspect": "node --import tsx ./apps/offline-runner/src/main.ts inspect",
+    "offline:inspect-all": "node --import tsx ./apps/offline-runner/src/main.ts inspect-all",
+    "dev:local": "node ./scripts/build.mjs && node --import tsx --watch ./apps/local-web/src/server.ts",
+    "start:local": "node ./dist/apps/local-web/src/server.js",
+    "live": "node --import tsx ./apps/offline-runner/src/live.ts",
+    "api:sandbox": "node ./scripts/create-api-sandbox.mjs",
+    "api:lab": "node ./apps/api-lab/cli.mjs",
+    "api:test": "node --test ./apps/api-lab/*.test.mjs"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.4",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "csv-parse": "7.0.2",
+    "decimal.js": "10.6.0",
+    "fastify": "5.12.5",
+    "pino": "10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.1",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}
