@@ -41,9 +41,10 @@ export class SimulationService {
  suggest(mandateId:string,key:string):SafetyConfig {return this.store.transaction(key,{action:'suggest',mandateId},state=>{const c=suggestConfig(this.policies.getMandate(mandateId),this.now());state.configs.push(c);return c;});}
  confirm(configId:string,parameters:unknown,reviewed:string[],actor:HumanActor,key:string):SafetyConfig {
  return this.store.transaction(key,{action:'confirm',configId,parameters,reviewed,actor},state=>{const c=state.configs.find(c=>c.config_id===configId);if(!c)throw new AppError(404,'CONFIG_NOT_FOUND','Configuration not found.');const mandate=this.policies.getMandate(c.mandate_id);if(mandate.status!=='active'||mandate.version!==c.mandate_version)throw new AppError(409,'G05_REVISION_CONFLICT','The mandate changed. Prepare new permissions.');this.assertOwner(actor,mandate.source_scenario_id);if(mandate.uncertainty_policy!=='ask')throw new AppError(409,'C25_RECONFIRM_REQUIRED','Create and confirm new permissions with the ask policy.');const p=validateParameters(parameters);
- if(c.status==='confirmed')throw new AppError(409,'CONFIG_IMMUTABLE','Confirmed permissions are immutable. Prepare a new version.');this.assertExecutableConfig(c);
+ if(c.status==='confirmed')throw new AppError(409,'CONFIG_IMMUTABLE','Confirmed permissions are immutable. Prepare a new version.');this.assertExecutableConfig({...c,parameters:p});
  if(c.requirements.some(r=>!reviewed.includes(r.requirement_id)))throw new AppError(409,'C03_REQUIREMENT_UNRESOLVED','All requirements must be reviewed.');
- for(const r of c.requirements){if(r.filter_ids.includes('G06')&&r.parameter_keys.length===0)throw new AppError(409,'G06_RULE_INVALID',r.description);for(const key of r.parameter_keys){const value=p[key as keyof typeof p];if(value===null||(key==='attributes'&&Array.isArray(value)&&!value.length))throw new AppError(409,'C03_REQUIREMENT_UNRESOLVED',`Required parameter to specify: ${key}.`);}}
+ const completeManualReview=(p.manual_review_requirements??[]).some(requirement=>requirement.source_excerpt===c.instruction&&requirement.description===c.instruction);
+ for(const r of c.requirements){if(r.filter_ids.includes('G06')&&r.parameter_keys.length===0)throw new AppError(409,'G06_RULE_INVALID',r.description);for(const key of r.parameter_keys){const value=p[key as keyof typeof p],original=c.parameters[key as keyof typeof p];if(value===null||(key==='attributes'&&Array.isArray(value)&&!value.length)){const originallyMissing=original===null||(key==='attributes'&&Array.isArray(original)&&!original.length);if(!completeManualReview||!originallyMissing)throw new AppError(409,'C03_REQUIREMENT_UNRESOLVED',`Required parameter to specify: ${key}.`);}}}
  if(c.parameters.max_order_chf!==null&&p.max_order_chf!==null&&new Decimal(p.max_order_chf).gt(c.parameters.max_order_chf))throw new AppError(409,'C03_PERMISSION_AMENDMENT_REQUIRED','The proposed ceiling exceeds the instruction; explicitly amend the mandate.');
  assertNoWeakening(c.parameters,p);
  c.parameters=p;c.requirements=c.requirements.map(r=>({...r,status:'confirmed',question:null,author:actor.actor_id}));c.status='confirmed';c.confirmed_by=actor.actor_id;c.confirmed_at=this.now();return c;});}
@@ -82,8 +83,8 @@ export class SimulationService {
    // Validate the entire batch before recording any consent or audit entry.
    for(const {answer,question} of checked){
     if(question.kind==='amend_mandate'||question.kind==='retry_or_repair')throw new AppError(409,'G06_PREREQUISITE_UNAVAILABLE','This question requires a mandate change or technical repair.');
-    if(answer.value==='cancel'||question.kind==='confirm_risk'&&answer.value!=='confirm')throw new AppError(400,'RESPONSE_INVALID','Confirm this purchase, or use its decline action.');
-    if(question.kind!=='confirm_risk'&&(!answer.source_ref?.trim()||!answer.source_excerpt?.trim()||['yes','oui','confirm'].includes(answer.value.trim().toLowerCase())))throw new AppError(400,'G06_EVIDENCE_REQUIRED','A yes does not create a fact: provide a source and excerpt.');
+    if(answer.value==='cancel'||['confirm_risk','confirm_requirement'].includes(question.kind)&&answer.value!=='confirm')throw new AppError(400,'RESPONSE_INVALID','Confirm this purchase, or use its decline action.');
+    if(!['confirm_risk','confirm_requirement'].includes(question.kind)&&(!answer.source_ref?.trim()||!answer.source_excerpt?.trim()||['yes','oui','confirm'].includes(answer.value.trim().toLowerCase())))throw new AppError(400,'G06_EVIDENCE_REQUIRED','A yes does not create a fact: provide a source and excerpt.');
    }
    this.checkMandate(run);
    const now=this.now(),expires_at=new Date(Date.parse(now)+run.config.parameters.consent_ttl_seconds*1000).toISOString();
@@ -117,6 +118,7 @@ export class SimulationService {
   });
  }
  private assertExecutableConfig(config:SafetyConfig):void{
+ if((config.parameters.manual_review_requirements??[]).some(requirement=>!config.instruction.includes(requirement.source_excerpt)))throw new AppError(409,'C03_REQUIREMENT_UNRESOLVED','Manual review requirements must quote the confirmed instruction.');
  const mandate=this.policies.getMandate(config.mandate_id);const compiled=suggestConfig(mandate,config.created_at);
  if(hasUnsupportedRule(config)||hasUnsupportedRule(compiled))throw new AppError(409,'G06_RULE_INVALID','A hard rule cannot be enforced by this engine. Update the permissions before starting or approving purchases.');
  assertNoWeakening(compiled.parameters,config.parameters);

@@ -59,7 +59,7 @@ function browser(pathname='/wallet/new',storedMode:'local'|'live'='local'){
  const calls:Array<{path:string;init?:RequestInit;body?:Record<string,unknown>}>=[];
  let delayed:((path:string,init?:RequestInit)=>Promise<Response|undefined>)|undefined;
  const prepared=new Map<string,Record<string,unknown>>();
- const options={scenarios:[{scenario_id:'S',scenario_name:'Scenario',instruction:'Tea only'}],model:'local',ai_configured:false,live_configured:true,live_environment:'mock'};
+ const options={scenarios:[{scenario_id:'S',scenario_name:'Scenario',instruction:'Tea only'}],model:'gpt-test',ai_configured:true,live_configured:true,live_environment:'mock'};
  const context=vm.createContext({URL,URLSearchParams,DOMException,AbortController,Response,Headers,FormData,Intl,Map,Set,console,crypto:{randomUUID:()=>`key-${Math.random()}`},sessionStorage:saved,localStorage:local,location,setTimeout,clearTimeout,HTMLButtonElement:Control,HTMLTextAreaElement:Control,HTMLFormElement:Control,HTMLElement:Control,HTMLInputElement:Control,
   window:{addEventListener(){}},history:{replaceState(_state:unknown,_title:string,path:string){const url=new URL(path,'http://wallet.local');location.pathname=url.pathname;location.search=url.search;location.href=path;}},
   document:{querySelector:(selector:string)=>elements.get(selector.slice(1))??null,createElement:()=>new Control(`created-${Math.random()}`),title:''},
@@ -70,7 +70,7 @@ function browser(pathname='/wallet/new',storedMode:'local'|'live'='local'){
    if(url.pathname==='/api/wallet/session')return response({csrf:`csrf-${url.searchParams.get('mode')}`});
    if(url.pathname==='/api/wallet/runs')return response({runs:[{run_id:'OFFLINE',scenario_id:'S',mode:'local',status:'completed',approved_chf:'10'},{run_id:'ONLINE',scenario_id:'S',mode:'live',status:'running',approved_chf:'20'}]});
    if(url.pathname==='/api/wallet/api-starts')return response({starts:[]});
-   if(url.pathname==='/api/wallet/prepare'){const prep={...body,preparation_id:`P-${prepared.size}`,status:'ready',config:{parameters:{max_order_chf:'10',learn_confirmed_habits:false}},warnings:[],clarifications:[]};prepared.set(prep.preparation_id,prep);return response(prep);}
+   if(url.pathname==='/api/wallet/prepare'){const prep={...body,preparation_id:`P-${prepared.size}`,status:'ready',config:{parameters:{max_order_chf:'10',learn_confirmed_habits:false}},warnings:[],clarifications:[],decoding:{model_returned:'gpt-test',model_requested:'gpt-test',created_at:'2026-09-19T10:12:13.000Z',response_id:`response-${prepared.size}`}};prepared.set(prep.preparation_id,prep);return response(prep);}
    if(url.pathname.endsWith('/confirm'))return response({run_id:'NEW'});
    if(url.pathname.startsWith('/api/wallet/preparations/'))return response(prepared.get(url.pathname.split('/').at(-1)!));
    throw Error(`Unexpected request: ${path}`);
@@ -86,6 +86,15 @@ function browser(pathname='/wallet/new',storedMode:'local'|'live'='local'){
 }
 
 describe('actual global toggle and wizard handlers',()=>{
+ it('keeps a failed OpenAI decoding unconfirmable and retries the saved instruction as a new preparation',async()=>{
+  const ui=browser();await ui.open();let attempts=0;
+  const failed={preparation_id:'FAILED',scenario_id:'S',instruction:'Tea only',mode:'local',status:'failed',config:null,decoding:null,permissions:[],warnings:[],clarifications:[],error:'OpenAI request timed out.'};
+  ui.delay(async(path)=>{if(path.startsWith('/api/wallet/prepare?')&&++attempts===1)return response(failed);if(path.startsWith('/api/wallet/preparations/FAILED?'))return response(failed);return undefined;});
+  await ui.prepare();expect(ui.node('wallet-prep').innerHTML).toContain('OpenAI decoding did not complete');expect(ui.node('wallet-prep').innerHTML).toContain('Retry decoding');expect(ui.node('wallet-prep').innerHTML).not.toContain('confirm-form');expect(ui.node('wallet-prep').innerHTML).not.toContain('prepared locally');expect(ui.node('wallet-instruction').value).toBe('Tea only');
+  ui.node('retry-decoding').emit('click');await until(()=>ui.node('wallet-prep').innerHTML.includes('Your spending permissions'));
+  const calls=ui.calls.filter(call=>call.path.startsWith('/api/wallet/prepare?'));expect(calls).toHaveLength(2);expect(calls[0]!.body).toEqual(calls[1]!.body);expect(new Headers(calls[0]!.init?.headers).get('idempotency-key')).not.toBe(new Headers(calls[1]!.init?.headers).get('idempotency-key'));expect(ui.calls.some(call=>call.path.includes('/confirm'))).toBe(false);
+  expect(ui.node('wallet-prep').innerHTML).toContain('Decoded with OpenAI · gpt-test');expect(ui.node('wallet-prep').innerHTML).toContain('datetime="2026-09-19T10:12:13.000Z"');expect(ui.node('wallet-prep').innerHTML).toContain('Response ID: <code>response-0</code>');
+ });
  it('sets the accessible switch, filters history, and keeps offline reads away from API starts',async()=>{
   const ui=browser('/');await ui.open();expect(ui.node('data-mode-switch').attributes.get('aria-checked')).toBe('false');expect(ui.app.innerHTML).toContain('/wallet/runs/OFFLINE');expect(ui.app.innerHTML).not.toContain('/wallet/runs/ONLINE');expect(ui.calls.some(call=>call.path.includes('/api-starts'))).toBe(false);
   await ui.toggle();expect(readDataMode(ui.local)).toBe('live');expect(ui.node('data-mode-switch').attributes.get('aria-checked')).toBe('true');expect(ui.node('data-mode-status').textContent).toContain('local API emulator');expect(ui.app.innerHTML).toContain('/wallet/runs/ONLINE');expect(ui.app.innerHTML).not.toContain('/wallet/runs/OFFLINE');expect(ui.calls.at(-1)?.path).toContain('mode=live');

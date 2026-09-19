@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowsPurchaseResponse, liveApprovalBody, runRenderSignature, runStatusText, collectLiveAnswers, retryEligible } from '../apps/local-web/web/wallet-ui.js';
+import { allowsPurchaseResponse, liveApprovalBody, runRenderSignature, runStatusText, collectLiveAnswers, retryEligible, purchaseConfirmation, purchaseReviewSnapshot } from '../apps/local-web/web/wallet-ui.js';
 import { renderPurchaseCard, renderReview } from '../apps/local-web/web/wallet-run-view.js';
 import { assess } from '../packages/local-runtime/src/simulation/evaluator.js';
 import { filterMessage } from '../packages/contracts/src/filter-messages.js';
@@ -49,26 +49,76 @@ describe('local recovery controls in the actual wallet frontend', () => {
 });
 
 describe('explicit live answers and minimum amount messages', () => {
- it('preserves distinct sourced answers and checked consent', () => {
-  const data = new FormData();
-  for (const [id, value, source] of [['size', '43', 'size chart'], ['returns', '14', 'return policy']]) {
-   data.set(`value:${id}`, value!); data.set(`source_ref:${id}`, source!); data.set(`source_excerpt:${id}`, `${source}: ${value}`);
-  }
-  data.set('value:device', 'confirm');
-  expect(collectLiveAnswers(data, [{ question_id: 'size', kind: 'choose_variant' }, { question_id: 'returns', kind: 'provide_evidence' }, { question_id: 'device', kind: 'confirm_risk' }])).toEqual([
-   { question_id: 'size', value: '43', source_ref: 'size chart', source_excerpt: 'size chart: 43' },
-   { question_id: 'returns', value: '14', source_ref: 'return policy', source_excerpt: 'return policy: 14' },
+ it('keeps the binary acceptance explicit without inventing product evidence', () => {
+  expect(collectLiveAnswers([{ question_id: 'size', kind: 'confirm_requirement' }, { question_id: 'returns', kind: 'confirm_requirement' }, { question_id: 'device', kind: 'confirm_risk' }])).toEqual([
+   { question_id: 'size', value: 'confirm' },
+   { question_id: 'returns', value: 'confirm' },
    { question_id: 'device', value: 'confirm' },
   ]);
  });
- it('requires complete evidence and a correction for questions the confirmation button cannot resolve', () => {
-  const data = new FormData();
-  const risk=runView().purchases[0]!.assessment!;const html=renderReview(risk,risk.authorization_id,'live');expect(html).toContain('Confirm this purchase');expect(html).toContain('accept the risks listed above');
-  expect(() => collectLiveAnswers(data, [{ question_id: 'proof', kind: 'provide_evidence' }])).toThrow('every question');
-  for (const kind of ['replace_quote', 'amend_mandate', 'retry_or_repair']) expect(() => collectLiveAnswers(data, [{ question_id: 'repair', kind }])).toThrow('corrected quote');
+ it('keeps required system verification outside the binary acceptance button', () => {
+  const risk=runView().purchases[0]!.assessment!;const html=renderReview(risk,risk.authorization_id,'live');expect(html).toContain('Accept this purchase');expect(html).toContain('accept the risks listed above');
+  for (const kind of ['provide_evidence', 'choose_variant', 'replace_quote', 'amend_mandate', 'retry_or_repair']) expect(() => collectLiveAnswers([{ question_id: 'repair', kind }])).toThrow('before confirmation');
  });
  it('shows the actual amount and the confirmed minimum', () => {
   expect(filterMessage('C09', 'C09_PURCHASE_BELOW_MINIMUM', '18.50', '20')).toBe('C09: Total CHF 18.50 is below the confirmed CHF 20.00 minimum, including delivery.');
+ });
+});
+
+describe('binary decisions belong to the displayed purchase card', () => {
+ it.each(['local','live'] as const)('accepts only the selected card and its current open questions in %s mode',mode=>{
+  const view=runView('awaiting_user',mode),first=view.purchases[0]!,second=structuredClone(first);
+  second.authorization_id='ANOTHER_PURCHASE';second.assessment!.authorization_id=second.authorization_id;
+  second.assessment!.offer_hash='second-offer';second.assessment!.revision=2;
+  second.assessment!.questions=second.assessment!.questions.map(q=>({...q,question_id:`second-${q.question_id}`,offer_hash:'second-offer'}));
+  second.assessment!.questions.push({...second.assessment!.questions[0]!,question_id:'already-resolved',state:'resolved',answer_id:'prior-answer'});
+  view.purchases.push(second);
+  const firstSnapshot=purchaseReviewSnapshot(first.assessment!),secondSnapshot=purchaseReviewSnapshot(second.assessment!);
+  const confirmation=purchaseConfirmation(view,second.authorization_id,secondSnapshot)!;
+  expect(confirmation.purchase.authorization_id).toBe(second.authorization_id);
+  expect(confirmation.answers).toEqual(second.assessment!.questions.filter(q=>q.state==='open').map(q=>({question_id:q.question_id,value:'confirm'})));
+  expect(confirmation.answers.some(answer=>first.assessment!.questions.some(q=>q.question_id===answer.question_id))).toBe(false);
+  expect(liveApprovalBody(confirmation.purchase.authorization_id,confirmation.assessment,confirmation.answers)).toMatchObject({authorization_id:second.authorization_id,offer_hash:'second-offer',expected_revision:2});
+  expect(purchaseConfirmation(view,first.authorization_id,secondSnapshot)).toBeNull();
+  expect(purchaseConfirmation(view,'missing-card',firstSnapshot)).toBeNull();
+  expect(purchaseConfirmation(view,first.authorization_id,firstSnapshot)).not.toBeNull();
+  const html=view.purchases.map(p=>renderPurchaseCard(p,mode,'active')).join('');
+  expect(html.match(/data-review-action="approve"/g)).toHaveLength(2);
+  expect(html.match(/data-review-action="decline"/g)).toHaveLength(2);
+  expect(html).not.toMatch(/<(?:input|textarea|select)\b/);
+ });
+ it('requires a fresh review after the offer or questions change, even without a revision bump',()=>{
+  const view=runView(),purchase=view.purchases[0]!,a=purchase.assessment!,snapshot=purchaseReviewSnapshot(a);
+  a.offer_hash='replacement-offer';expect(purchaseConfirmation(view,purchase.authorization_id,snapshot)).toBeNull();
+  const replacement=purchaseReviewSnapshot(a);
+  a.questions.push({...a.questions[0]!,question_id:'new-requirement',kind:'confirm_requirement',prompt:'Review this additional requirement.'});
+  expect(purchaseConfirmation(view,purchase.authorization_id,replacement)).toBeNull();
+  expect(purchaseConfirmation(view,purchase.authorization_id,purchaseReviewSnapshot(a))?.answers).toEqual(expect.arrayContaining([{question_id:'new-requirement',value:'confirm'}]));
+  const oldWording=purchaseReviewSnapshot(a);a.questions[0]!.prompt='The purchase must satisfy an updated requirement.';
+  expect(purchaseConfirmation(view,purchase.authorization_id,oldWording)).toBeNull();
+  a.execution_state='technical_hold';expect(purchaseConfirmation(view,purchase.authorization_id,purchaseReviewSnapshot(a))).toBeNull();
+ });
+ it('keeps a pending budget hold declinable without allowing acceptance',()=>{
+  const view=runView('technical_hold','live'),purchase=view.purchases[0]!,a=purchase.assessment!;
+  purchase.platform_status='awaiting_human';
+  const budget=a.results.find(r=>r.filter_id==='C12')!;
+  budget.outcome='not_evaluated';budget.reasons[0]!.code='C12_BUDGET_RESERVED_ELSEWHERE';budget.reasons[0]!.effect='technical_hold';
+  const html=renderPurchaseCard(purchase,'live','awaiting_customer');
+  expect(html).toContain('Waiting for available budget');expect(html).toContain('checked again automatically');
+  expect(html).toContain('data-review-action="decline"');expect(html).not.toContain('data-review-action="approve"');
+  expect(html).not.toMatch(/<(?:input|textarea|select)\b/);
+  expect(purchaseConfirmation(view,purchase.authorization_id,purchaseReviewSnapshot(a))).toBeNull();
+  a.execution_state='awaiting_user';budget.outcome='pass';
+  expect(renderPurchaseCard(purchase,'live','awaiting_customer')).toContain('data-review-action="approve"');
+ });
+ it('keeps a now-denied pending remote purchase declinable until the platform records a decision',()=>{
+  const view=runView('technical_hold','live'),purchase=view.purchases[0]!;
+  purchase.platform_status='awaiting_human';purchase.assessment!.decision='deny';
+  const html=renderPurchaseCard(purchase,'live','awaiting_customer');
+  expect(html).toContain('data-review-action="decline"');expect(html).not.toContain('data-review-action="approve"');
+  purchase.platform_status='declined';expect(renderPurchaseCard(purchase,'live','active')).not.toContain('data-review-action="decline"');
+  purchase.platform_status='awaiting_human';purchase.assessment!.lock=null;
+  expect(renderPurchaseCard(purchase,'live','active')).not.toContain('consent-countdown');
  });
 });
 

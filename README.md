@@ -1,137 +1,172 @@
-<div align="center">
+# Viseca — installation et configuration
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/logos/viseca-dark.png">
-  <img src="assets/logos/viseca-light.png" alt="Viseca" height="56">
-</picture>
+Application TypeScript locale de contrôle des achats d'un agent. Le serveur Fastify sert l'interface et l'API ; le runtime utilise le pack CSV fourni et un stockage local JSON/SQLite.
 
-<br><br>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/logos/swiss-ai-weeks-dark.png">
-  <img src="assets/logos/swiss-ai-weeks-light.png" alt="Swiss {ai} Weeks" height="34">
-</picture>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/logos/start-hack-tour-dark.png">
-  <img src="assets/logos/start-hack-tour-light.png" alt="START Hack Tour, St. Gallen" height="78">
-</picture>
-
-# START Global x Swiss AI Weeks 2026: Viseca Challenge
-
-Materials for Viseca's Swiss {ai} Weeks 2026 hackathon challenge.
-
-</div>
-
-## Contents
-
-| | |
+| Documentation du projet | Contenu |
 | --- | --- |
-| [challenge.md](challenge.md) | Full public challenge brief and judging criteria. |
-| [technical_details.md](technical_details.md) | Sandbox API and data contract. |
-| [data/](data/) | Synthetic offline data pack: scenarios, purchase attempts, reference data, and JSON schemas. |
+| Ce README | Installation, variables d'environnement et démarrage |
+| [Structure des données](docs/02_STRUCTURE_DONNEES.md) | Pack source, contrats TypeScript et stockage |
+| [Routes utilisées](docs/03_ROUTES_ET_PARCOURS.md) | Pages, API locale, appels externes et simulateur |
 
-## Conception du prototype offline
+Les documents fournis par les organisateurs restent disponibles : [énoncé du challenge](challenge.md), [contrat technique de l'API](technical_details.md), [guide du pack](data/README.md) et [dictionnaire des données](data/data_dictionary.md).
 
-[Analyse du dépôt, structure de données, routes et plan d'action](docs/README.md).
+## Prérequis
 
-## Application locale d'inspection
+- Node.js **24.15.0** (voir [.nvmrc](.nvmrc) ; plage acceptée : `>=24.15.0 <25`). SQLite est fourni par Node, sans serveur de base de données à installer.
+- pnpm **11.19.0**, version fixée dans [package.json](package.json).
+- Une clé OpenAI pour préparer une nouvelle instruction dans l'interface, quel que soit le mode d'achat. Les données enregistrées et les commandes d'inspection restent accessibles sans clé.
+- Une clé d'équipe Viseca pour utiliser l'API distante en mode Online.
 
-Le dépôt contient une application TypeScript avec serveur et stockage locaux. Elle charge le pack CSV, décode une instruction en JSON complet, puis démarre automatiquement le traitement des achats après confirmation du JSON. Les permissions, décisions et leur provenance sont conservées. Seul le décodage facultatif de l'instruction utilise l'API OpenAI.
+## Installer
 
-Prérequis : Node.js 24 (la version attendue est indiquée dans `.nvmrc`) et pnpm 11.19.0.
+Depuis la racine du dépôt cloné :
 
-```bash
-cd '/Users/hedifourati/Documents/Perso/hackathon/St Gall 18:09/viseca-2026'
+```sh
+nvm install
 nvm use
-pnpm install
+npm install --global pnpm@11.19.0
+pnpm install --frozen-lockfile
+```
+
+`nvm` est facultatif si la bonne version de Node est déjà installée. Le workspace et l'autorisation de compilation d'esbuild sont définis dans [pnpm-workspace.yaml](pnpm-workspace.yaml).
+
+Créer le fichier de configuration uniquement s'il n'existe pas :
+
+```sh
+test -f .env.local || cp .env.example .env.local
+```
+
+Modifier ensuite `.env.local`. Il est ignoré par Git, tout comme les états d'exécution. Le serveur charge ce fichier au démarrage depuis le répertoire courant ; les variables déjà exportées dans le terminal ont priorité. Redémarrer le serveur après un changement.
+
+## Configurer
+
+| Variable | Valeur dans `.env.example` / défaut | Utilisation |
+| --- | --- | --- |
+| `PORT` | `3210` | Port de l'interface et de l'API locale ; écoute sur `127.0.0.1` |
+| `AI_ENABLED` | `false` dans l'exemple | Mettre `true` pour les nouveaux décodages et l'extraction facultative des offres. Le code désactive l'IA lorsque la valeur vaut exactement `false` ; une clé est également nécessaire. |
+| `OPENAI_API_KEY` | Vide | Clé utilisée uniquement côté serveur |
+| `OPENAI_MODEL` | `gpt-5.4` | Modèle du décodage d'instruction. L'extraction facultative des offres utilise séparément `gpt-5-nano`. |
+| `VISECA_API_MODE` | `remote` | `remote` pour l'API hébergée, `mock` pour une API HTTP sur boucle locale, `disabled` pour désactiver l'accès Viseca du serveur |
+| `LEASH_BASE_URL` | `https://leash-api-production.up.railway.app` dans l'exemple | Origine de l'API Viseca ; le serveur requiert sa configuration pour Online |
+| `TEAM_API_KEY` | Vide | Clé d'équipe envoyée à Viseca par le serveur |
+| `LOCAL_STATE_DIR` | `.local-state` | Politiques, décodages, simulations, wallet et sessions live |
+| `LOCAL_OUTPUT_DIR` | `output` | Runs d'inspection, événements et traces |
+
+Les chemins personnalisés sont résolus depuis le répertoire courant. Les dossiers du pack (`data`), des états et des sorties doivent être distincts et ne pas être imbriqués. Utiliser une seule instance du serveur par dossier de stockage.
+
+Pour préparer des achats à partir du pack CSV, renseigner notamment :
+
+```dotenv
+VISECA_API_MODE=disabled
+AI_ENABLED=true
+OPENAI_API_KEY=remplacer_par_votre_cle
+OPENAI_MODEL=gpt-5.4
+```
+
+Le mode **Offline** choisit les achats du pack CSV ; une nouvelle préparation d'instruction appelle tout de même OpenAI. Avec `AI_ENABLED=false`, les nouveaux décodages et préparations sont bloqués, et les activités sauvegardées restent consultables. Un échec OpenAI ne crée pas de permissions de remplacement.
+
+Pour les achats **Online**, configurer en plus `VISECA_API_MODE=remote`, `LEASH_BASE_URL` et `TEAM_API_KEY`, puis choisir Online dans l'interface. Les profils et les activités sont séparés par mode. L'adresse de référence pour configurer l'application est celle de [.env.example](.env.example) ; l'adresse Azure encore citée dans le contrat technique d'origine est historique.
+
+## Démarrer
+
+```sh
 pnpm build
 pnpm start:local
 ```
 
-Ouvrir ensuite [http://127.0.0.1:3210](http://127.0.0.1:3210). Le serveur n'écoute que sur l'interface locale. Les brouillons et mandats sont écrits dans `.local-state/`; les runs, événements et traces sont écrits dans `output/`. Ces deux dossiers d'exécution sont ignorés par Git.
+Ouvrir [http://127.0.0.1:3210](http://127.0.0.1:3210) et garder le terminal du serveur ouvert. Le build génère `dist/` ; `start:local` utilise ce résultat.
 
-Si les dépendances sont déjà installées mais que `pnpm` n’est pas disponible dans le terminal, les scripts se lancent aussi avec `npm run build` puis `npm run start:local`. Le build seul ne démarre pas le serveur ; garder le terminal du serveur ouvert.
+```sh
+curl --fail http://127.0.0.1:3210/api/health
+```
 
-Pour lancer le serveur source en mode surveillance (un build initial est effectué automatiquement) :
+La réponse attendue contient `status: "ok"`, `pack.available: true`, cinq scénarios et 45 achats. Ce contrôle vérifie le chargement local, pas l'accès OpenAI ou Viseca. Un pack ou un état impossible à charger produit un HTTP 503 avec la cause dans `pack.error`.
 
-```bash
+Pour développer :
+
+```sh
 pnpm dev:local
 ```
 
-## Validation et CLI
+Cette commande fait un build initial puis surveille les modules du serveur. Les fichiers de l'interface servis viennent de `dist/` : relancer `pnpm build` après une modification du navigateur, ou redémarrer `dev:local`.
 
-Les parcours **Offline** et **Online** sont maintenant réunis dans la même application.
-Le switch dans la barre supérieure choisit les données, les activités, les brouillons
-et les profils affichés. Offline utilise le pack CSV; Online traite les demandes
-reçues de l’API avec le même moteur M/C/G. Les profils d’apprentissage restent séparés.
+Pour démarrer en imposant la configuration distante :
 
-Renseigner `TEAM_API_KEY` et `LEASH_BASE_URL` dans `.env.local` (voir
-[.env.example](.env.example)), puis lancer `npm run build` et `npm run start:local`.
-Le fichier privé reste exclu de Git. `npm run api:demo` ouvre une démonstration
-isolée sur le port 3212 avec une API locale et bloque les appels distants.
+```sh
+pnpm api:remote
+```
 
-Voir [le guide de la version fusionnée](README_API.md),
-[la matrice de validation API](docs/18_API_TEST_MATRIX.md) et
-[le bilan d’intégration](docs/19_INTEGRATION_ONLINE_OFFLINE.md).
-Le laboratoire [apps/api-lab](apps/api-lab/README.md) conserve ses GET, POST,
-PATCH et DELETE explicites. La copie `.parallel/viseca-api` reste une archive
-locale ignorée par Git; elle n’est plus nécessaire au fonctionnement.
+Cette commande reconstruit l'application, vérifie une clé d'équipe renseignée et une origine HTTPS, puis démarre le même serveur avec `VISECA_API_MODE=remote`.
 
-```bash
-pnpm typecheck
-pnpm test
-pnpm build
+## Simulateur API local
+
+```sh
+pnpm api:demo
+```
+
+Cette commande construit et démarre l'interface sur [http://127.0.0.1:3212](http://127.0.0.1:3212) et l'émulateur API sur [http://127.0.0.1:4313](http://127.0.0.1:4313), dans `.viseca/demo`. Elle bloque les appels réseau hors boucle locale et désactive l'IA : les nouvelles préparations d'instruction ne sont donc pas disponibles dans cette démonstration isolée. `pnpm api:demo:start` réutilise un build existant.
+
+| Variable de démonstration | Défaut |
+| --- | --- |
+| `API_DEMO_PORT` | `3212` |
+| `API_MOCK_PORT` | `4313` |
+| `API_DEMO_STATE_DIR` | `.viseca/demo` |
+
+Pour démarrer l'émulateur seul, puis vérifier ses routes depuis un autre terminal :
+
+```sh
+pnpm api:mock
+```
+
+```sh
+pnpm api:local health
+pnpm api:local reads
+```
+
+L'émulateur seul utilise `.local-state/api-mock` (`API_MOCK_STATE_DIR` permet de changer ce chemin). `API_MOCK_CONTRACT_PROFILE=railway pnpm api:mock` active les variantes de réponse encodées pour Railway ; le profil par défaut est `documented`. Ces variables sont à exporter dans le terminal : `api:mock` et `api:demo` ne chargent pas `.env.local`.
+
+## Laboratoire et CLI
+
+Le laboratoire utilise `.env.local` et peut contrôler la connexion à l'API configurée sans démarrer l'interface :
+
+```sh
+pnpm api:lab config
+pnpm api:lab health
+pnpm api:lab reads
+pnpm api:lab routes
+pnpm api:lab --help
+```
+
+`config` masque la clé ; `reads` lit bootstrap, références, historique, autorisations et événements. Les rapports vont dans `.viseca/api-lab`. Les POST/PATCH exigent un fichier JSON avec `--file` (sauf `draft`, qui fournit un exemple limité au prix). Le GET `/v1/decision-requests/next` consomme une livraison et n'est pas inclus dans `reads`. Les mutations ne sont pas répétées automatiquement. `VISECA_API_MODE=disabled` bloque les appels réseau du laboratoire ; `api:local` force le mode mock et bloque le réseau distant.
+
+Le worker terminal est disponible via `pnpm live prepare`, puis `pnpm live create-run --config binding.json` ou `pnpm live follow --config binding.json --run-id RUN_ID`. Il charge `.env.local` et nécessite un `LiveBinding` valide, décrit dans la [structure des données](docs/02_STRUCTURE_DONNEES.md), ainsi qu'un mandat distant déjà confirmé. `pnpm live status --config binding.json --run-id RUN_ID` lit la progression.
+
+## Vérifier l'installation
+
+```sh
 pnpm offline:validate-data
 pnpm offline:inspect --scenario SCEN0000
-pnpm offline:inspect-all
+pnpm typecheck
+pnpm test
+pnpm api:test
+pnpm api:check
 ```
 
-`offline:inspect-all` parcourt les cinq scénarios et les 45 achats. Tous restent explicitement **Non évalués** : la fin d'un run atteste uniquement que les données ont été parcourues.
+Les commandes d'inspection utilisent un stockage temporaire et n'appellent ni Viseca ni OpenAI. `pnpm offline:inspect-all` parcourt les cinq scénarios et les 45 achats sans rendre de décision de paiement ; ils restent « Non évalués ». `api:test` teste le laboratoire CLI ; `api:check` contrôle les contrats API et les protections du réseau local.
 
-## Périmètre actuel
+Les scripts supplémentaires disponibles sont listés dans [package.json](package.json). Après installation des dépendances avec pnpm, on peut également lancer les scripts avec `npm run <nom>` (ajouter `--` avant leurs arguments).
 
-L’inspection historique est conservée. Un mode **simulation locale M/C/G** ajoute les 50 contrôles, une configuration relue et confirmée, les questions humaines typées, les locks et un registre SQLite transactionnel. Le worker **Viseca** est distinct ; il utilise le même moteur et compte uniquement les approbations acceptées par la plateforme. Le parcours complet est validé sur le simulateur HTTP local et sur l’API Railway : cinq scénarios, 45 achats et six confirmations/refus via `/resolve`. Voir [le guide d’usage](docs/12_USAGE_SIMULATION_ET_VISECA.md).
+## Emplacement du code
 
-## Décoder une instruction
+| Dossier | Rôle |
+| --- | --- |
+| `apps/local-web` | Serveur Fastify et interface navigateur |
+| `apps/api-mock` | Émulateur de l'API Viseca et démonstration locale |
+| `apps/api-lab` | Client HTTP et laboratoire CLI |
+| `apps/offline-runner` | Commandes d'inspection, d'évaluation et worker live |
+| `packages/contracts` | Types des données, politiques, décisions et échanges |
+| `packages/local-runtime` | Chargement du pack, services, moteurs et stockage |
+| `data` | CSV, schémas JSON, manifeste et fixtures fournis |
+| `tests` | Tests et fixtures du projet |
 
-La clé reste côté serveur dans `.env.local`, ignoré par Git. Le serveur charge ce fichier au démarrage ; les variables déjà définies dans l'environnement gardent priorité. Paramètres :
-
-```dotenv
-OPENAI_API_KEY=   # renseigner uniquement dans .env.local
-OPENAI_MODEL=gpt-5.4-mini
-AI_ENABLED=true
-```
-
-1. Ouvrir un scénario puis cliquer sur **Decode instruction**.
-2. Relire ou modifier le JSON complet dans **Permission JSON**. Aucun formulaire complémentaire n'est demandé. Le serveur valide les types, les bornes et le respect de l'instruction avant d'accepter les paramètres.
-3. Cliquer sur **Confirm JSON and start** : le JSON confirmé devient la configuration du moteur et le run démarre automatiquement.
-
-`min_order_chf` et `max_order_chf` s'appliquent au montant total facturé en CHF, frais compris. `null` signifie que cette borne n'a pas été demandée. Un prix exact utilise deux bornes égales :
-
-```json
-{
-  "min_order_chf": "20",
-  "max_order_chf": "20"
-}
-```
-
-Cet exemple montre seulement les deux champs de montant ; l'interface affiche tous les paramètres exécutables. Une fourchette conserve les deux bornes. Les comparaisons strictes sont converties au centime (`< 20` → maximum `19.99`, `> 20` → minimum `20.01`). Une ambiguïté réelle concernant une proposition d'achat déclenche toujours une revue humaine avant approbation.
-
-Le catalogue des 45 champs est dérivé du schéma officiel `authorization_event.schema.json` : feuilles de `authorization`, politique d'incertitude et plafond de période. Les tailles, couleurs, durées de retour ou critères de familiarité sans champ dédié restent des exigences séparées, pas des champs inventés. Les valeurs extraites décrivent des contraintes, pas des données réelles d'achat (notamment le plafond de période ne représente pas une dépense déjà calculée).
-
-Les métadonnées techniques appartenant exclusivement au pack/runtime (identifiants, ordre source, numéro de ligne, timestamp, compteurs historiques) restent explicitement absentes de cette vue d'instruction. Elles seront fournies par les données locales, jamais inventées par le modèle. Cela ne modifie pas les données d'achat.
-
-Un décodage déclenche **une seule requête Responses**, sans outil ni retry automatique, avec JSON Schema strict et `store: false`. Seules l'instruction exacte et la définition des champs sont envoyées. Le résultat reste une proposition à relire : la validation technique ne garantit pas l'exactitude sémantique. Le fournisseur applique ses politiques de conservation ; `store: false` ne garantit pas une rétention nulle.
-
-Le cache atomique `.local-state/instruction-decodings.json` évite de rappeler le modèle après un double clic, un rechargement ou un redémarrage, pour une instruction/modèle/version de prompt/schéma identiques. Après une erreur ou une interruption, une relance explicite est nécessaire et peut occasionner un nouvel appel facturé. Aucun appel n'est déclenché par la navigation, l'enregistrement d'un mandat ou « Achat suivant ». `AI_ENABLED=false` désactive les nouveaux décodages sans empêcher l'inspection locale ni la lecture des résultats enregistrés. Le serveur est prévu pour une seule instance par dossier de stockage.
-
-Routes du service partagé : `GET /api/scenarios/:scenarioId/instruction-decoding` (lecture locale) et `POST /api/scenarios/:scenarioId/decode-instruction` (en-tête `Idempotency-Key`, corps `{}` ou `{ "retry": true }`). Un brouillon peut référencer `instruction_decoding_id` ; le serveur vérifie son lien avec l'instruction, sans accepter de résultat IA fourni par le navigateur.
-
-L’extraction facultative des faits d’offre utilise également GPT-5 nano, uniquement après un clic explicite. Ses citations sont validées localement et restent des propositions ; le moteur de décision et le worker live n’appellent aucun modèle.
-
-# StartCase1
-
-## Apprentissage des habitudes
-
-L’option **Learn my confirmed habits**, activée explicitement à la confirmation du mandat, permet de reconnaître progressivement les appareils, créneaux horaires et pays confirmés par le client. Les décisions gardent le profil utilisé ; plafonds, exigences produit et confirmations obligatoires restent imposés. Les confirmations ne nourrissent le profil qu’après une approbation finale, et les replays des mêmes achats ne renforcent pas la confiance. Voir [le fonctionnement et les limites](docs/15_APPRENTISSAGE_HABITUDES.md).
+Le détail des fichiers persistés est dans la [structure des données](docs/02_STRUCTURE_DONNEES.md). Les états normaux (`.local-state`, `output`) et ceux des outils (`.viseca`) sont ignorés par Git ; les chemins personnalisés doivent être exclus séparément si nécessaire.

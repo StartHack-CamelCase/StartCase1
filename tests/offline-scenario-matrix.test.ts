@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -100,10 +101,9 @@ afterAll(async () => {
 async function setup(scenarioId: string, policy: string) {
   let now = new Date('2026-09-19T00:00:00.000Z');
   const dir = await mkdtemp(join(tmpdir(), 'viseca-offline-matrix-'));
-  const decode = vi.fn(async () => { throw new Error('The offline instruction decoder must stay disabled.'); });
   const options = {
     stateDir: join(dir, 'state'), outputDir: join(dir, 'output'), now: () => now,
-    instructionDecoder: { model: 'offline-matrix', configured: false, decode },
+    instructionDecoder:configuredInstructionDecoder(),
   };
   const runtime = await createLocalRuntime(options);
   const resource = { runtime: runtime as LocalRuntime | null, dir };
@@ -115,16 +115,15 @@ async function setup(scenarioId: string, policy: string) {
     customer_id: runtime.wallet.actorCustomer(scenarioId), channel: 'local_ui', authenticated_by_server: true,
   };
   const prep = runtime.wallet.prepare({ scenario_id: scenarioId, instruction: scenario.cardholder_instruction, mode: 'local' }, `${scenarioId}:${policy}:prepare`);
-  const ready = runtime.wallet.getPreparation(prep.preparation_id);
+  const ready = await readyWalletPreparation(()=>runtime.wallet.getPreparation(prep.preparation_id));
   expect(ready.status, ready.error ?? undefined).toBe('ready');
   expect(ready.clarifications).toEqual([]);
   expect(ready.config!.parameters.learn_confirmed_habits).toBe(false);
   const confirmed = await runtime.wallet.confirm(ready.preparation_id, ready.config!.parameters, actor);
   expect(await runtime.wallet.confirm(ready.preparation_id, ready.config!.parameters, actor)).toEqual(confirmed);
   expect(runtime.simulations.list()).toHaveLength(1);
-  expect(decode).not.toHaveBeenCalled();
   return {
-    runtime, resource, options, actor, confirmed, expectedSources, decode,
+    runtime, resource, options, actor, confirmed, expectedSources,
     advance: (ms: number) => { now = new Date(now.getTime() + ms); },
   };
 }
@@ -218,7 +217,6 @@ describe.each(policies)('official offline scenarios: %s', policy => {
     x.resource.runtime = await createLocalRuntime(x.options);
     expect(x.resource.runtime.simulations.get(id)).toEqual(final);
     expect(x.resource.runtime.wallet.getRun(id)).toEqual(view);
-    expect(x.decode).not.toHaveBeenCalled();
     reports.push({
       scenario_id: scenarioId, policy, proposals: final.purchases.length,
       initial: countStates(initial), final: countStates(final.purchases.map(p => p.assessments.at(-1)!)),

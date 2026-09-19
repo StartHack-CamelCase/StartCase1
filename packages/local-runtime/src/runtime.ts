@@ -120,6 +120,14 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
   const offers = new OfferExtractionService(createOpenAIOfferDecoder(), resolve(stateDir, "offer-extractions.json"));
   await offers.initialize();
   const wallet = new WalletService({pack,policies,simulations,instructions},stateDir,options.now,1800,options.liveOptions);
-  await wallet.initialize();
+  try {
+    await wallet.initialize();
+  } catch (error) {
+    // A failed restoration must not leave partially attached workers polling
+    // or SQLite handles open while the app reports itself unavailable.
+    await Promise.allSettled([wallet.close(), offers.close()]);
+    simulations.close();
+    throw error;
+  }
   return { pack, policies, scenarios, runs, instructions, simulations, offers, wallet, close: async () => { await wallet.close(); await offers.close(); simulations.close(); } };
 }

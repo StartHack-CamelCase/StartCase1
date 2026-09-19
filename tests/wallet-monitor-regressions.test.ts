@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -9,7 +10,7 @@ import type {Assessment,SimRun} from '../packages/contracts/src/simulation.js';
 it('buys the selected 27-inch monitor once and rejects the official duplicate without a second approval',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'wallet-monitor-regression-'));
  const transport=vi.fn(async():Promise<Response>=>{throw Error('No external API allowed');});
- const app=await createLocalApp({stateDir:join(directory,'state'),outputDir:join(directory,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:{configured:false,model:'disabled',decode:async()=>{throw Error('No AI allowed');}},liveOptions:{environment:'disabled',baseUrl:'',apiKey:'',transport}});
+ const app=await createLocalApp({stateDir:join(directory,'state'),outputDir:join(directory,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:configuredInstructionDecoder(),liveOptions:{environment:'disabled',baseUrl:'',apiKey:'',transport}});
  try{
   const session=await app.inject('/api/wallet/session?scenario_id=SCEN0004');
   const headers={cookie:String(session.headers['set-cookie']).split(';')[0]!,'x-csrf-token':session.json<{csrf:string}>().csrf,'idempotency-key':'monitor-prepare'};
@@ -17,7 +18,7 @@ it('buys the selected 27-inch monitor once and rejects the official duplicate wi
   const instruction=options.scenarios.find(s=>s.scenario_id==='SCEN0004')!.instruction;
   const prepared=await app.inject({method:'POST',url:'/api/wallet/prepare',headers,payload:{scenario_id:'SCEN0004',instruction,mode:'local'}});
   expect(prepared.statusCode,prepared.body).toBe(202);
-  const prep=prepared.json<WalletPreparation>();
+  const prep=await readyWalletPreparation(async()=>(await app.inject(`/api/wallet/preparations/${prepared.json().preparation_id}`)).json<WalletPreparation>());
   expect(prep.permissions).toEqual(expect.arrayContaining([expect.objectContaining({key:'mission_quantity',value:'Up to 1 across this shopping mission'})]));
   const confirmed=await app.inject({method:'POST',url:`/api/wallet/preparations/${prep.preparation_id}/confirm`,headers:{...headers,'idempotency-key':'monitor-confirm'},payload:{confirmed:true,mode:'local',parameters:{...prep.config!.parameters,allowed_item_ids:['IT0017']}}});
   expect(confirmed.statusCode,confirmed.body).toBe(200);

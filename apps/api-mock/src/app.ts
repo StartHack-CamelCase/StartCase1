@@ -331,7 +331,6 @@ export async function createMockApi(options: MockApiOptions = {}): Promise<Fasti
       const scenario = pack.scenariosById.get(scenarioId) ?? fail(404, "scenario_not_found", "Scenario not found.");
       const mandate = getMandate(string(input["mandate_id"], "mandate_id"));
       if (mandate.status !== "active") fail(409, "mandate_revoked", "A revoked mandate cannot start a run.");
-      if (mandate.instruction !== scenario.cardholder_instruction) fail(409, "instruction_mismatch", "Preserve the scenario's exact original instruction.");
       if (state.runs.some((run) => run.status === "running")) fail(409, "active_run_exists", "Only one run may use the local team queue at a time.");
       const attempt = pack.attemptsByScenario.get(scenarioId)![0]!;
       const authority = pack.authoritiesById.get(attempt.authority_id)!;

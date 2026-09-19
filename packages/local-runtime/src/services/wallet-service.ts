@@ -10,21 +10,21 @@ import type { HumanActor, HumanAnswer, Assessment, SimRun } from '../../../contr
 import type { WalletMode, WalletPreparation, WalletRunView } from '../../../contracts/src/wallet.js';
 import { AppError } from '../../../contracts/src/errors.js';
 import { asId } from '../../../contracts/src/ids.js';
-import { hash, offerHash } from '../simulation/common.js';
+import { hash, offerHash, result } from '../simulation/common.js';
 import { validateParameters } from '../simulation/config.js';
 import { evaluateLive, type LiveBinding } from '../simulation/live-engine.js';
 import type { PolicyService } from './policy-service.js';
 import type { SimulationService } from '../simulation/service.js';
 import type { InstructionDecodingService } from './instruction-decoding-service.js';
 import { WalletStore } from '../storage/wallet-store.js';
-import { preparePermissions, applyParameters, hardRulesFromParameters, permissionSummary } from './wallet-preparation.js';
+import { preparePermissions, applyParameters, hardRulesFromParameters, permissionSummary, validateMonetaryInterpretations } from './wallet-preparation.js';
 import { SerialExecutor } from './serial-executor.js';
 import type { LiveEntry } from '../simulation/viseca-worker.js';
 import { LiveSessionService } from './live-session-service.js';
 import { liveConnectionFromEnv, type LiveConnectionOptions } from './live-configuration.js';
 
 // Version of local permission compilation, independent of the model prompt.
-export const WALLET_PERMISSION_COMPILER_VERSION='wallet-permissions-merged-v5';
+export const WALLET_PERMISSION_COMPILER_VERSION='wallet-permissions-merged-v13';
 type Dependencies={pack:DataPack;policies:PolicyService;simulations:SimulationService;instructions:InstructionDecodingService};
 export type LiveHumanResponse={authorization_id:string;decision:'approve'|'decline';offer_hash?:string;expected_revision?:number;answers:Array<{question_id:string;value:string;source_ref?:string;source_excerpt?:string}>};
 export type HumanResponseRecovery={status:'settled'|'abandoned'|'pending';result?:WalletRunView};
@@ -57,16 +57,22 @@ export class WalletService {
  actorCustomer(scenarioId:string):string{const first=this.runtime.pack.attemptsByScenario.get(asId(scenarioId))?.[0];const c=first&&this.runtime.pack.authoritiesById.get(first.authority_id)?.customer_id;if(!c)throw new AppError(404,'scenario_not_found','Choose one of the supplied scenarios.');return c;}
  prepare(input:{scenario_id:string;instruction:string;mode:WalletMode},key:string):WalletPreparation {
   this.actorCustomer(input.scenario_id);if(!input.instruction.trim()||input.instruction.length>8000)throw new AppError(400,'instruction_invalid','Enter an instruction between 1 and 8,000 characters.');
-  if(input.mode==='live'){if(!this.live.configured())throw new AppError(503,'live_not_configured','Viseca access is not configured. You can use local simulation now.');if(this.runtime.pack.scenariosById.get(asId(input.scenario_id))!.cardholder_instruction!==input.instruction)throw new AppError(422,'challenge_instruction_mismatch','The hosted challenge requires this scenario’s exact original instruction. Restore it or choose local simulation.');}
+  if(input.mode==='live'&&!this.live.configured())throw new AppError(503,'live_not_configured','Viseca access is not configured. You can use local simulation now.');
   const id='WALLET_PREP_'+hash(key).slice(0,32);const existing=this.store.list().find(p=>p.preparation_id===id);
   if(existing){if(!this.liveEnvironmentMatches(existing))throw new AppError(409,'preparation_environment_mismatch','Prepare new permissions for the selected API environment.');if(existing.instruction!==input.instruction||existing.mode!==input.mode||existing.scenario_id!==input.scenario_id)throw new AppError(409,'G01_IDEMPOTENCY_CONFLICT','This request key belongs to another instruction.');return this.refreshPreparation(existing);}
   const p:WalletPreparation={preparation_id:id,...input,...(input.mode==='live'?{live_environment:this.connection.environment==='mock'?'mock' as const:'remote' as const}:{}),status:'processing',model:this.runtime.instructions.get(asId(input.scenario_id)).model,error:null,config:null,permissions:[],clarifications:[],warnings:[],decoding:null,created_at:this.now().toISOString()};this.store.save(p);
   const work=this.finishPreparation(p);this.preparing.add(work);void work.finally(()=>this.preparing.delete(work));return structuredClone(p);
  }
  getPreparation(id:string):WalletPreparation{return this.refreshPreparation(this.store.get(id));}
+ private failedPreparation(p:WalletPreparation,message:string):WalletPreparation {
+  p.status='failed';p.error=message;p.config=null;p.permissions=[];p.clarifications=[];p.warnings=[];p.amount_review_requirement=null;
+  p.compiler_version=WALLET_PERMISSION_COMPILER_VERSION;this.store.save(p);return p;
+ }
  private refreshPreparation(p:WalletPreparation):WalletPreparation {
   // Only unconfirmed reviews may be recompiled; saved consent and AI evidence stay immutable.
-  if(p.status!=='ready'||p.confirmation||p.compiler_version===WALLET_PERMISSION_COMPILER_VERSION)return p;
+  if(p.status!=='ready'||p.confirmation)return p;
+  if(!p.decoding||p.warnings.some(w=>w.startsWith('AI decoding was unavailable: '))||p.clarifications.some(c=>c.key==='unresolved:decoding'))return this.failedPreparation(p,'This saved preparation did not complete OpenAI decoding. Retry decoding to prepare permissions.');
+  if(p.compiler_version===WALLET_PERMISSION_COMPILER_VERSION)return p;
   const previousConfig=p.config;
   Object.assign(p,preparePermissions(this.runtime.pack,p.instruction,p.decoding,previousConfig?.created_at??p.created_at));
   if(previousConfig&&p.config)p.config.config_id=previousConfig.config_id;
@@ -74,21 +80,25 @@ export class WalletService {
  }
  private async finishPreparation(p:WalletPreparation):Promise<void>{try{
   const view=this.runtime.instructions.getForInstruction(asId(p.scenario_id),p.instruction);
-  p.decoding=view.configured?await this.runtime.instructions.decodeText(asId(p.scenario_id),p.instruction,['failed','interrupted'].includes(view.status)||Boolean(view.error)):null;
+  if(!view.configured)throw new AppError(503,'instruction_decoding_unavailable','OpenAI decoding is not configured. Configure OpenAI before preparing permissions.');
+  p.decoding=await this.runtime.instructions.decodeText(asId(p.scenario_id),p.instruction,true);
   Object.assign(p,preparePermissions(this.runtime.pack,p.instruction,p.decoding,this.now().toISOString()));p.compiler_version=WALLET_PERMISSION_COMPILER_VERSION;p.status='ready';this.store.save(p);
- }catch(error){p.status='failed';p.error=error instanceof AppError?error.message:'We could not prepare reliable permissions. Your instruction is saved; please try again.';this.store.save(p);}}
- async confirm(id:string,values:Record<string,unknown>,actor:HumanActor,expectedMode?:WalletMode):Promise<{run_id:string;mandate_id:string;mode:WalletMode}>{return this.confirmations.run(async()=>{
-  const saved=this.store.get(id);this.assertOwner(actor,saved.scenario_id);const p=this.refreshPreparation(saved);if(p.status!=='ready')throw new AppError(409,'permission_review_not_ready','Wait until the permission review is ready.');
+ }catch(error){this.failedPreparation(p,error instanceof AppError?error.message:'OpenAI decoding did not complete. Your instruction is saved; retry decoding.');}}
+ async confirm(id:string,values:Record<string,unknown>,actor:HumanActor,expectedMode?:WalletMode,amountInterpretations:unknown={}):Promise<{run_id:string;mandate_id:string;mode:WalletMode}>{return this.confirmations.run(async()=>{
+  const saved=this.store.get(id);this.assertOwner(actor,saved.scenario_id);const p=this.refreshPreparation(saved);if(p.status!=='ready')throw new AppError(409,'permission_review_not_ready',p.status==='failed'?'OpenAI decoding must succeed before you can confirm permissions. Retry decoding.':'Wait until the OpenAI permission review is ready.');
+  if(!p.decoding&&!p.confirmation?.run_id)throw new AppError(409,'permission_review_not_ready','OpenAI decoding must succeed before starting a new run. Retry decoding.');
   if(!this.liveEnvironmentMatches(p))throw new AppError(409,'preparation_environment_mismatch','Prepare new permissions for the selected API environment.');
   if(expectedMode!==undefined&&p.mode!==expectedMode)throw new AppError(409,'preparation_mode_mismatch','The selected mode changed. Prepare and review the permissions again.');
-  const parameters=applyParameters(p,values,this.runtime.pack);const fingerprint=hash({parameters,actor_id:actor.actor_id});
+  const parameters=applyParameters(p,values,this.runtime.pack,amountInterpretations);const meanings=validateMonetaryInterpretations(p,amountInterpretations);const monetaryConsent=Object.keys(meanings).length?{amount_interpretations:meanings}:{};const fingerprint=hash({parameters,actor_id:actor.actor_id,...monetaryConsent});
   // Older consent predates min_order_chf. Compare a normalized copy without
   // rewriting the signed parameters or their original fingerprint.
-  if(p.confirmation&&p.confirmation.fingerprint!==fingerprint&&hash({parameters:validateParameters(p.confirmation.parameters),actor_id:p.confirmation.actor_id})!==fingerprint)throw new AppError(409,'G01_IDEMPOTENCY_CONFLICT','These permissions were already confirmed with different choices.');
+  if(p.confirmation&&p.confirmation.fingerprint!==fingerprint&&hash({parameters:validateParameters(p.confirmation.parameters),actor_id:p.confirmation.actor_id,...(p.confirmation.amount_interpretations?{amount_interpretations:p.confirmation.amount_interpretations}:{})})!==fingerprint)throw new AppError(409,'G01_IDEMPOTENCY_CONFLICT','These permissions were already confirmed with different choices.');
   if(p.confirmation?.run_id)return {run_id:p.confirmation.run_id,mandate_id:p.confirmation.mandate_id!,mode:p.mode};
-  p.confirmation??={fingerprint,parameters,actor_id:actor.actor_id};this.store.save(p);
+  p.confirmation??={fingerprint,parameters,actor_id:actor.actor_id,...monetaryConsent};this.store.save(p);
   const hard_rules=hardRulesFromParameters(parameters);const draftId=asId<'LOCAL_PD'>('LOCAL_PD_WALLET_'+hash(id).slice(0,24));
-  const draft=await this.runtime.policies.createDraft(p.scenario_id,{instruction:p.instruction,hard_rules,uncertainty_policy:'ask',guidance:permissionSummary(parameters).map(x=>`${x.label}: ${x.value}. ${x.description}`),open_questions:[]},p.decoding??undefined,{localCustomInstruction:p.mode==='local',draftId:draftId as never});p.confirmation.draft_id=draft.draft_id;this.store.save(p);
+  // The local policy record mirrors the reviewed instruction in both modes;
+  // the scenario selects proposals, while the mandate defines permissions.
+  const draft=await this.runtime.policies.createDraft(p.scenario_id,{instruction:p.instruction,hard_rules,uncertainty_policy:'ask',guidance:permissionSummary(parameters).map(x=>`${x.label}: ${x.value}. ${x.description}`),open_questions:[]},p.decoding??undefined,{localCustomInstruction:true,draftId:draftId as never});p.confirmation.draft_id=draft.draft_id;this.store.save(p);
   const mandate=await this.runtime.policies.confirmDraft(draft.draft_id,'local_user');p.confirmation.mandate_id=mandate.mandate_id;this.store.save(p);
   const config=this.runtime.simulations.suggest(mandate.mandate_id,`${id}:config`);
   const current=this.runtime.simulations.configs(mandate.mandate_id).find(c=>c.config_id===config.config_id)!;
@@ -104,7 +114,17 @@ export class WalletService {
   if(p?.mode==='live'){
    if(!this.liveEnvironmentMatches(p))throw new AppError(409,'wallet_environment_mismatch','This run belongs to another API environment.');
    const session=this.live.get(id);const config=this.runtime.simulations.configs(p.config?.mandate_id??'').find(c=>c.config_id===p.confirmation!.config_id)??this.runtime.simulations.store.select(state=>state.configs.find(c=>c.config_id===p.confirmation!.config_id))!;
-   return {run_id:id,server_time:this.now().toISOString(),has_more_proposals:!['completed','cancelled','failed','revoked'].includes(session.status),platform_run_id:session.run_id,mode:'live',status:session.status,mandate_status:session.mandate_status,mandate_id:session.mandate_id,scenario_id:p.scenario_id,approved_chf:session.entries.filter(e=>e.accepted?.decision==='approve').reduce((n,e)=>n.add(e.event.authorization.billing_amount_chf),new Decimal(0)).toFixed(2),reservations:session.entries.filter(e=>e.reserved).length,config,audit:session.entries.flatMap(e=>e.history.map(h=>({sequence:0,at:h.at,scenario_timestamp:e.event.authorization.timestamp,actor:e.intent?.actor_id??'server',event:h.kind,authorization_id:e.id,assessment_id:null,filter_ids:[],details:h.details,correlation_id:e.id}))).sort((a,b)=>a.at.localeCompare(b.at)).map((a,i)=>({...a,sequence:i+1})),transport:{environment:this.connection.environment??'remote',last_status:session.last_poll_status,last_error:session.last_error??null,note:this.connection.environment==='mock'?'Local API emulator. No requests are sent to Viseca. Final approvals count only after API acceptance.':'Viseca API. Final approvals count only after platform acceptance.'},purchases:session.entries.map(e=>{const a=e.event.authorization;return {authorization_id:e.id,merchant_id:a.merchant.merchant_id,merchant_name:a.merchant.merchant_name,amount_chf:String(a.billing_amount_chf),currency:a.currency,description:a.purchase_description,items:a.items,assessment:liveAssessment(e,this.now().getTime()),platform_status:e.state};})};
+   const now=this.now();
+   const pending=session.entries.some(e=>e.state==='awaiting_human'&&Date.parse(e.human_expires_at??'')>now.getTime());
+   const binding:LiveBinding={config:{...config,mandate_id:session.mandate_id},live_mandate_id:session.mandate_id,scenario_id:p.scenario_id,hard_rules:hardRulesFromParameters(config.parameters),history_hash:hash(this.runtime.pack.history),pack_version:this.runtime.pack.pack_version};
+   const habits=pending?this.live.learningEntries():[];
+   const journal=pending?this.runtime.simulations.behaviorJournal(liveHabitObservations(habits)):undefined;
+   const assessments=new Map(session.entries.map(entry=>{
+    if(entry.state!=='awaiting_human'||Date.parse(entry.human_expires_at??'')<=now.getTime())return [entry.id,liveAssessment(entry,now.getTime())] as const;
+    const current=evaluateLive(this.runtime.pack,binding,entry.event,session.run_id,session.entries,now.toISOString(),[],habits,journal).snapshot as Assessment|undefined;
+    return [entry.id,current?pendingLiveAssessment(entry,current,now.getTime()):unavailableLiveAssessment(entry,now.getTime())] as const;
+   }));
+   return {run_id:id,server_time:this.now().toISOString(),has_more_proposals:!['completed','cancelled','failed','revoked'].includes(session.status),platform_run_id:session.run_id,mode:'live',status:session.status,mandate_status:session.mandate_status,mandate_id:session.mandate_id,scenario_id:p.scenario_id,approved_chf:session.entries.filter(e=>e.accepted?.decision==='approve').reduce((n,e)=>n.add(e.event.authorization.billing_amount_chf),new Decimal(0)).toFixed(2),reservations:session.entries.filter(e=>e.reserved).length,config,audit:session.entries.flatMap(e=>e.history.map(h=>({sequence:0,at:h.at,scenario_timestamp:e.event.authorization.timestamp,actor:e.intent?.actor_id??'server',event:h.kind,authorization_id:e.id,assessment_id:null,filter_ids:[],details:h.details,correlation_id:e.id}))).sort((a,b)=>a.at.localeCompare(b.at)).map((a,i)=>({...a,sequence:i+1})),transport:{environment:this.connection.environment??'remote',last_status:session.last_poll_status,last_error:session.last_error??null,note:this.connection.environment==='mock'?'Local API emulator. No requests are sent to Viseca. Final approvals count only after API acceptance.':'Viseca API. Final approvals count only after platform acceptance.'},purchases:session.entries.map(e=>{const a=e.event.authorization;return {authorization_id:e.id,merchant_id:a.merchant.merchant_id,merchant_name:a.merchant.merchant_name,amount_chf:String(a.billing_amount_chf),currency:a.currency,description:a.purchase_description,items:a.items,assessment:assessments.get(e.id)??null,platform_status:e.state};})};
   }
   const r=this.runtime.simulations.get(id);return this.localView(r);
  }
@@ -154,17 +174,24 @@ export class WalletService {
   const binding:LiveBinding={config,live_mandate_id:session.mandate_id,scenario_id:p.scenario_id,hard_rules:hardRulesFromParameters(config.parameters),history_hash:hash(this.runtime.pack.history),pack_version:this.runtime.pack.pack_version};
   try{await this.live.respond(id,input.authorization_id,input.decision,actor,async()=>({actor_id:actor.actor_id,proof:command.proof}),async entry=>{
    if(input.decision==='decline')return true;
-   const shown=entry.proposal?.snapshot as Assessment|undefined;
-   if(!shown||input.offer_hash!==shown.offer_hash||input.expected_revision!==shown.revision)throw new AppError(409,'live_offer_changed','Reload this purchase and review the current questions before confirming.');
-   const latest=evaluateLive(this.runtime.pack,binding,entry.event,session.run_id,this.live.get(id).entries,this.now().toISOString(),[],this.live.learningEntries(),this.runtime.simulations.behaviorJournal(liveHabitObservations(this.live.learningEntries())));const a=latest.snapshot as Assessment|undefined;if(!a||a.decision==='deny'||a.technical_filter_ids.length)return false;
-   const answeredIds=new Set(input.answers.map(x=>x.question_id));
-   if(answeredIds.size!==input.answers.length||input.answers.length!==a.questions.length||a.questions.some(q=>!answeredIds.has(q.question_id)))throw new AppError(422,'explicit_answers_required','Answer each displayed question explicitly before approving this purchase.');
-   const answers:HumanAnswer[]=a.questions.map(q=>{const supplied=input.answers.find(x=>x.question_id===q.question_id)!;if(q.kind==='confirm_risk'&&supplied.value!=='confirm')throw new AppError(422,'explicit_confirmation_required',q.prompt);if(!['confirm_risk','provide_evidence','choose_variant'].includes(q.kind))throw new AppError(422,'purchase_needs_correction',q.prompt);if(q.kind!=='confirm_risk'&&(!supplied.source_ref||!supplied.source_excerpt))throw new AppError(422,'evidence_required',q.prompt);return {answer_id:randomUUID(),question_id:q.question_id,fact_key:q.fact_key,kind:q.kind,value:supplied.value,source_ref:supplied?.source_ref??null,source_excerpt:supplied?.source_excerpt??null,actor,offer_hash:offerHash(entry.event,config),config_revision:config.revision,created_at:this.now().toISOString(),expires_at:new Date(Math.min(this.now().getTime()+config.parameters.consent_ttl_seconds*1000,Date.parse(entry.human_expires_at!))).toISOString(),consumed_by:null};});
+   const latest=evaluateLive(this.runtime.pack,binding,entry.event,session.run_id,this.live.get(id).entries,this.now().toISOString(),[],this.live.learningEntries(),this.runtime.simulations.behaviorJournal(liveHabitObservations(this.live.learningEntries())));
+   const current=latest.snapshot as Assessment|undefined;
+   if(!current)return false;
+   const a=pendingLiveAssessment(entry,current,this.now().getTime());
+   if(input.offer_hash!==a.offer_hash||input.expected_revision!==a.revision)throw new AppError(409,'live_offer_changed','This purchase changed. Review its updated details, then choose Accept or Decline.');
+   if(a.decision==='deny'||a.technical_filter_ids.length)return false;
+   assertLiveAnswerCoverage(a.questions,input.answers);
+   const answers:HumanAnswer[]=a.questions.map(q=>{
+    const supplied=input.answers.find(x=>x.question_id===q.question_id)!;
+    if(!['confirm_risk','confirm_requirement'].includes(q.kind))throw new AppError(422,'purchase_needs_correction','This purchase is waiting for verification. You can decline it now.');
+    if(supplied.value!=='confirm')throw new AppError(422,'explicit_confirmation_required','Choose Accept or Decline for this purchase.');
+    return {answer_id:randomUUID(),question_id:q.question_id,fact_key:q.fact_key,kind:q.kind,value:'confirm',source_ref:null,source_excerpt:null,actor,offer_hash:offerHash(entry.event,config),config_revision:config.revision,created_at:this.now().toISOString(),expires_at:new Date(Math.min(this.now().getTime()+config.parameters.consent_ttl_seconds*1000,Date.parse(entry.human_expires_at!))).toISOString(),consumed_by:null};
+   });
    const verified=evaluateLive(this.runtime.pack,binding,entry.event,session.run_id,this.live.get(id).entries,this.now().toISOString(),answers,this.live.learningEntries(),this.runtime.simulations.behaviorJournal(liveHabitObservations(this.live.learningEntries())));const learned=(verified.snapshot as Assessment|undefined)?.behavior_learning?.confirmations??[];return {approved:verified.decision==='approve',evidence:[...(verified.evidence??[]),...learned.map(observation=>({type:'confirmed_habit_observation',observation}))]};
   });}catch(error){
    if(error instanceof AppError){this.store.removeResponse(key);throw error;}
    const message=error instanceof Error?error.message:'';
-   if(['human_resolution_not_pending','human_confirmation_expired','human_resolution_rejected','human_confirmation_used','mandate_revoked','mandate_revocation_pending','live_approval_suspended'].includes(message)){this.store.removeResponse(key);throw new AppError(409,message,'This purchase can no longer accept this response. Refresh its current status.');}
+   if(['human_resolution_not_pending','human_confirmation_expired','human_resolution_rejected','human_confirmation_used','mandate_revoked','mandate_revocation_pending','live_approval_suspended','live_history_read_only'].includes(message)){this.store.removeResponse(key);throw new AppError(409,message,'This purchase can no longer accept this response. Refresh its current status.');}
    throw new AppError(503,'human_response_pending','The API result is still being reconciled. Retry this saved response shortly.');
   }
   command.result=this.getRun(id);this.store.saveResponse(command);return command.result;
@@ -183,6 +210,36 @@ export function liveAssessment(e:LiveEntry,now=Date.now()):Assessment|null {
  else if(expired){result.decision=null;result.questions=[];result.lock=null;result.can_finalize=false;}
  return result;
 }
+/** Refresh only the pending view. The original proposal and accepted history stay
+ * immutable; consent is bound to the exact current questions, not a stale poll. */
+export function unavailableLiveAssessment(entry:LiveEntry,now=Date.now()):Assessment|null {
+ const original=entry.proposal?.snapshot as Assessment|undefined;
+ if(!original?.schema_version)return null;
+ const current=structuredClone(original);
+ const hold=result('G06','not_evaluated','G06_PREREQUISITE_UNAVAILABLE','Current purchase verification is unavailable.');
+ current.results=current.results.map(check=>check.filter_id==='G06'?hold:check);
+ current.technical_filter_ids=[...new Set([...current.technical_filter_ids,'G06' as const])];
+ current.questions=[];current.can_finalize=false;current.evaluation_complete=false;
+ return pendingLiveAssessment(entry,current,now);
+}
+
+export function pendingLiveAssessment(entry:LiveEntry,current:Assessment,now=Date.now()):Assessment {
+ const assessment=structuredClone(current);
+ if(assessment.can_finalize&&assessment.questions.length===0){
+  const fact_key='purchase_confirmation';
+  assessment.questions=[{question_id:'Q_'+hash([assessment.offer_hash,fact_key]).slice(0,20),fact_key,kind:'confirm_risk',filter_ids:[],evidence_ids:[],prompt:'Accept this purchase?',offer_hash:assessment.offer_hash,state:'open',answer_id:null}];
+  assessment.decision='step_up';
+ }
+ // No clock, random assessment ID or unrelated card may invalidate this review.
+ assessment.revision=parseInt(hash([assessment.offer_hash,assessment.questions.map(q=>[q.question_id,q.kind,q.prompt]),assessment.blocking_filter_ids,assessment.technical_filter_ids]).slice(0,12),16);
+ assessment.assessment_id=`${(entry.proposal?.snapshot as Assessment|undefined)?.assessment_id??entry.id}:review:${assessment.revision}`;
+ if(!assessment.lock&&entry.human_expires_at)assessment.lock={lock_id:`LOCK_${entry.id}`,kind:'pending_step_up',assessment_id:assessment.assessment_id,offer_hash:assessment.offer_hash,mandate_version:assessment.rule_snapshot.mandate_version,config_revision:assessment.rule_snapshot.config_revision,reason_filter_ids:[],reason_codes:[],evidence_ids:[],question_ids:assessment.questions.map(q=>q.question_id),observed_expected:[],created_at:entry.accepted?.at??assessment.recorded_at,expires_at:entry.human_expires_at,resolution:'answer_typed_questions'};
+ const projected=liveAssessment({...entry,proposal:{...entry.proposal,decision:assessment.decision,snapshot:assessment}},now)!;
+ if(projected.execution_state==='awaiting_user'&&(assessment.technical_filter_ids.length||assessment.decision==='deny'))projected.execution_state='technical_hold';
+ projected.can_finalize=false;
+ return projected;
+}
+
 function liveRequestError(error:unknown):AppError {
  if(error instanceof AppError)return error;
  const code=error instanceof Error?error.message:'';
@@ -197,7 +254,7 @@ function liveRequestError(error:unknown):AppError {
  * old click into consent for a newly required fact. */
 export function assertLiveAnswerCoverage(questions:Assessment['questions'],answers:Array<{question_id:string;value:string}>):void {
  const expected=new Set(questions.map(q=>q.question_id)),provided=new Set(answers.map(a=>a.question_id));
- if(expected.size!==answers.length||provided.size!==answers.length||answers.some(a=>!expected.has(a.question_id))||questions.some(q=>q.kind==='confirm_risk'&&answers.find(a=>a.question_id===q.question_id)?.value!=='confirm'))throw new AppError(409,'G05_QUESTIONS_CHANGED','The required confirmations changed. Refresh this purchase and review every question.');
+ if(expected.size!==answers.length||provided.size!==answers.length||answers.some(a=>!expected.has(a.question_id))||questions.some(q=>['confirm_risk','confirm_requirement'].includes(q.kind)&&answers.find(a=>a.question_id===q.question_id)?.value!=='confirm'))throw new AppError(409,'G05_QUESTIONS_CHANGED','This purchase changed. Review its updated details, then choose Accept or Decline.');
 }
 
 function hasLegacyLiveSessions(stateDir:string):boolean {

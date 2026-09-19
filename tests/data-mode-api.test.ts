@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -11,14 +12,14 @@ afterEach(async()=>{for(const {app,dir} of resources.splice(0)){await app.close(
 async function setup(){
  const dir=await mkdtemp(join(tmpdir(),'viseca-data-mode-'));
  const transport=vi.fn(async()=>{throw Error('Offline actions must not reach the API');});
- const app=await createLocalApp({stateDir:join(dir,'state'),outputDir:join(dir,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:{model:'local-test',configured:false,decode:async()=>{throw Error('No AI in mode tests');}},liveOptions:{environment:'mock',baseUrl:'http://127.0.0.1:4313',apiKey:'fake-test-key',transport}});
+ const app=await createLocalApp({stateDir:join(dir,'state'),outputDir:join(dir,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:configuredInstructionDecoder(),liveOptions:{environment:'mock',baseUrl:'http://127.0.0.1:4313',apiKey:'fake-test-key',transport}});
  resources.push({app,dir});
  const options=(await app.inject('/api/wallet/options?mode=local')).json();
  async function session(scenario:string,cookie?:string){const r=await app.inject({url:`/api/wallet/session?scenario_id=${scenario}&mode=local`,...(cookie?{headers:{cookie}}:{})});expect(r.statusCode).toBe(200);return {cookie:String(r.headers['set-cookie']).split(';')[0]!,'x-csrf-token':r.json().csrf,'idempotency-key':`mode-session-${scenario}`};}
  const headers=await session('SCEN0000');
  const payload={scenario_id:'SCEN0000',instruction:options.scenarios[0].instruction,mode:'local'};
  const response=await app.inject({method:'POST',url:'/api/wallet/prepare?mode=local',headers,payload});expect(response.statusCode,response.body).toBe(202);
- const prep=(await app.inject(`/api/wallet/preparations/${response.json().preparation_id}?mode=local`)).json<WalletPreparation>();expect(prep.status).toBe('ready');
+ const prep=await readyWalletPreparation(async()=>(await app.inject(`/api/wallet/preparations/${response.json().preparation_id}?mode=local`)).json<WalletPreparation>());expect(prep.status).toBe('ready');
  return {app,headers,prep,payload,transport,session,options};
 }
 

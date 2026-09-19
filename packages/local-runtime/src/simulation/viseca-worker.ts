@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { AuthorizationEvent } from '../../../contracts/src/event.js';
-import { hash } from './common.js';
+import { ENGINE_VERSION, hash } from './common.js';
 import { VisecaClient } from './viseca-client.js';
 
 export type LiveDecision='approve'|'decline'|'step_up';
@@ -85,7 +85,7 @@ export class VisecaWorker {
    entry.decision=decision;entry.intent={id:randomUUID(),operation:'decision',decision,at:this.iso()};entry.state='intended';
    this.record(entry,'submission_intended',entry.intent);await this.outbox.save();
    if(deadline-this.now()<=50){entry.state='deadline_missed';this.record(entry,'deadline_missed',{});await this.outbox.save();return null;}
-   return {id,intent_id:entry.intent.id,decision,deadline,body:{reason_codes:evaluation.reason_codes??[],customer_message:evaluation.customer_message,evidence:evaluation.evidence,engine_version:'mcg-1.0.0'}};
+   return {id,intent_id:entry.intent.id,decision,deadline,body:{reason_codes:evaluation.reason_codes??[],customer_message:evaluation.customer_message,evidence:evaluation.evidence,engine_version:ENGINE_VERSION}};
   });
   if(!pending)return this.entry(id);
   // POST is also outside the queue. Its durable reservation remains until accepted.

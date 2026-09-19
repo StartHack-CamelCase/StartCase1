@@ -78,14 +78,18 @@ export class InstructionDecodingService {
     return structuredClone({ configured: this.decoder.configured, model: this.decoder.model, status: stored?.status ?? "not_started", result: stored?.result ?? null, error: stored?.error ?? null });
   }
 
-  async decodeText(scenarioId: ScenarioId, instruction: string, retry = false): Promise<InstructionDecoding> {
+  async decodeText(scenarioId: ScenarioId, instruction: string, _retry = false): Promise<InstructionDecoding> {
     this.instruction(scenarioId);
     const key = this.key(instruction);
     const pending = this.pending.get(key); if (pending !== undefined) return structuredClone(await pending);
+    if (!this.decoder.configured) throw new AppError(503, "instruction_decoding_unavailable", "OpenAI decoding is not configured. Configure the server before preparing permissions.");
+    // A new decode action always calls the provider. Saved results are audit
+    // records only; in-flight duplicates and replayed HTTP commands still coalesce.
     const current = this.records.get(key);
-    if (current?.status === "completed" && current.result !== null && current.error === null) return structuredClone(current.result);
-    if (current !== undefined && !retry) throw new AppError(409, "instruction_decoding_retry_required", current.error?.message ?? "An explicit retry is required.");
-    if (!this.decoder.configured) throw new AppError(503, "instruction_decoding_unavailable", "Instruction decoding is not configured.");
+    if (current) {
+      const archiveKey = createHash("sha256").update(`archive:${key}:${current.result?.decoding_id ?? randomUUID()}`).digest("hex");
+      this.records.set(archiveKey, { ...structuredClone(current), key: archiveKey });
+    }
     const attempt = this.perform(key, instruction); this.pending.set(key, attempt);
     try { return structuredClone(await attempt); } finally { this.pending.delete(key); }
   }
@@ -100,42 +104,52 @@ export class InstructionDecodingService {
   }
 
   async decode(scenarioId: ScenarioId, retry = false): Promise<InstructionDecoding> {
-    const instruction = this.instruction(scenarioId);
-    const key = this.key(instruction);
-    const current = this.records.get(key);
-    if (current?.status === "completed" && current.result !== null && current.error===null && current.result.validation_version===INSTRUCTION_VALIDATION_VERSION && current.result.prompt_version === INSTRUCTION_PROMPT_VERSION && current.result.requirement_inventory?.version === REQUIREMENT_INVENTORY_VERSION) return structuredClone(current.result);
-    if (current?.status === "completed" && current.result !== null && !retry) throw new AppError(409, "instruction_decoding_retry_required", "The stored decoding is stale; a new review is required.");
-    const pending = this.pending.get(key);
-    if (pending !== undefined) return structuredClone(await pending);
-    if (current !== undefined && !retry) throw new AppError(409, "instruction_decoding_retry_required", current.error?.message ?? "The previous decoding did not finish. An explicit retry is required.");
-    if (!this.decoder.configured) throw new AppError(503, "instruction_decoding_unavailable", "AI decoding is not configured. Set OPENAI_API_KEY in .env.local and restart the server.");
-    if(current?.result){const archiveKey=createHash('sha256').update(`archive:${key}:${current.result.decoding_id}`).digest('hex');this.records.set(archiveKey,{...structuredClone(current),key:archiveKey});}
-    const attempt = this.perform(key, instruction);
-    this.pending.set(key, attempt);
-    try { return structuredClone(await attempt); }
-    finally { this.pending.delete(key); }
+    return this.decodeText(scenarioId, this.instruction(scenarioId), retry);
   }
 
   private async perform(key: string, instruction: string): Promise<InstructionDecoding> {
     this.records.set(key, { key, instruction, status: "processing", result: null, error: null });
-    // Persist the intention before the single remote request, for restart-safe deduplication.
+    // Persist the explicit action before bounded provider attempts. GET/restart never calls the provider.
     await this.save();
     const started = Date.now();
     let result: InstructionDecoding;
     try {
-      const response = await this.decoder.decode(instruction, this.fields);
-      let variables;
-      try { variables = validateInstructionFields(response.output, instruction, this.fields); }
-      catch (error) {
-        const candidate = response.output as { variables?: Array<Record<string, unknown>>; unmapped_requirements?: unknown[] };
-        if (!Array.isArray(candidate.variables)) throw error;
-        for (const variable of candidate.variables) {
-          if (variable["currency"] !== null && variable["currency"] !== undefined && (variable["field"] === "authorization.currency" || !/amount|spend|price|cost|plafond|ceiling|limit/i.test(String(variable["field"]))) && !/(?:in|en|currency|devise)\s+(?:CHF|EUR|GBP|USD)/i.test(instruction)) {
-            variable["currency"] = null;
-            variable["note"] = `${typeof variable["note"] === "string" ? variable["note"] + " " : ""}Review: unsupported transaction currency claim was removed conservatively.`;
+      const deadline = Date.now() + 120_000;
+      let response!: Awaited<ReturnType<InstructionDecoder["decode"]>>;
+      let variables!: ReturnType<typeof validateInstructionFields>;
+      let feedback: string | undefined;
+      let invalidAttempts = 0;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await this.decoder.decode(instruction, this.fields, {
+            timeoutMs: Math.max(1, Math.min(60_000, deadline - Date.now())),
+            ...(feedback ? { feedback } : {}),
+          });
+          try { variables = validateInstructionFields(response.output, instruction, this.fields); }
+          catch (error) {
+            const candidate = response.output as { variables?: Array<Record<string, unknown>>; unmapped_requirements?: unknown[] };
+            if (!Array.isArray(candidate?.variables)) throw error;
+            for (const variable of candidate.variables) {
+              if (variable["currency"] !== null && variable["currency"] !== undefined && (variable["field"] === "authorization.currency" || !/amount|spend|price|cost|plafond|ceiling|limit/i.test(String(variable["field"]))) && !/(?:in|en|currency|devise)\s+(?:CHF|EUR|GBP|USD)/i.test(instruction)) {
+                variable["currency"] = null;
+                variable["note"] = `${typeof variable["note"] === "string" ? variable["note"] + " " : ""}Review: unsupported transaction currency claim was removed conservatively.`;
+              }
+            }
+            variables = validateInstructionFields(response.output, instruction, this.fields);
           }
+          break;
+        } catch (error) {
+          const safe = error instanceof AppError ? error : null;
+          const invalid = safe?.code === "instruction_decoding_invalid" || safe?.code === "instruction_decoding_incomplete";
+          if (invalid) invalidAttempts++;
+          const retryable = safe?.details?.["retryable"] === true
+            || ["instruction_decoding_timeout", "instruction_decoding_network"].includes(safe?.code ?? "")
+            || (invalid && invalidAttempts < 2);
+          const delay = Math.min(2000, Math.max(250 * 2 ** attempt, Number(safe?.details?.["retry_after_ms"]) || 0));
+          if (!retryable || attempt === 2 || Date.now() + delay >= deadline) throw error;
+          if (invalid) feedback = `The previous output failed validation: ${safe!.message} Return a corrected complete decoding of the same original instruction, with literal excerpts from the allowed enum. Do not remove or weaken any requirement.`;
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-        variables = validateInstructionFields(response.output, instruction, this.fields);
       }
       result = {
         ...variables,
@@ -154,7 +168,7 @@ export class InstructionDecodingService {
         requirement_inventory: buildRequirementInventory(instruction, variables),
       };
     } catch (error) {
-      const safe = error instanceof AppError ? error : new AppError(502, "instruction_decoding_failed", "Decoding failed. No automatic retry was performed.");
+      const safe = error instanceof AppError ? error : new AppError(502, "instruction_decoding_failed", "OpenAI decoding could not be completed. Retry decoding; no permissions were prepared.");
       this.records.set(key, { key, instruction, status: "failed", result: null, error: { code: safe.code, message: safe.message } });
       await this.save();
       throw safe;

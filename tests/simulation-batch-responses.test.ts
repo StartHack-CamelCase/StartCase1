@@ -31,7 +31,7 @@ async function setup(options:{evidence?:boolean;unanswerable?:boolean}={}){
  const started=await app.inject({method:'POST',url:`/api/simulations/${run.run_id}/next`,headers:{'idempotency-key':'batch-next'},payload:{}});
  expect(started.statusCode,started.body).toBe(200);const assessment=started.json<{assessment:Assessment}>().assessment;
  expect(assessment.decision).toBe('step_up');expect(assessment.questions.map(q=>q.fact_key)).toEqual(expect.arrayContaining(['C18','C24']));
- const answers:SimulationHumanResponse[]=assessment.questions.map(q=>({question_id:q.question_id,value:q.kind==='confirm_risk'?'confirm':'green',...(q.kind==='provide_evidence'?{source_ref:'test-quote:color',source_excerpt:'Selected color: green.'}:{})}));
+ const answers:SimulationHumanResponse[]=assessment.questions.map(q=>({question_id:q.question_id,value:['confirm_risk','confirm_requirement'].includes(q.kind)?'confirm':'green'}));
  const url=`/api/simulations/${run.run_id}/authorizations/${assessment.authorization_id}/human-responses`;
  const payload={expected_revision:assessment.revision,offer_hash:assessment.offer_hash,answers};
  const send=(body:Record<string,unknown>=payload,key='batch-human-response')=>app.inject({method:'POST',url,headers:{...headers,'idempotency-key':key},payload:body});
@@ -57,29 +57,25 @@ describe('atomic local purchase confirmation',()=>{
   expect((await x.current()).commitments).toHaveLength(1);
  });
 
- it('rolls back the whole batch when a later answer has no evidence, then accepts a corrected retry',async()=>{
+ it('rolls back a batch with an invalid binary answer, then accepts every requirement together',async()=>{
   const x=await setup({evidence:true});
-  const evidence=x.answers.find(answer=>answer.source_ref)!,risks=x.answers.filter(answer=>!answer.source_ref);
+  const question=x.assessment.questions.find(q=>q.kind==='confirm_requirement')!;
   const stored=x.persisted();
-  const rejected=await x.send({...x.payload,answers:[...risks,{question_id:evidence.question_id,value:'green'}]});
-  expect(rejected.statusCode,rejected.body).toBe(400);expect(rejected.json().error.code).toBe('G06_EVIDENCE_REQUIRED');expect(x.persisted()).toEqual(stored);
-  const run=await x.current();expect(run.purchases[0]!.answers).toEqual([]);expect(run.purchases[0]!.assessments).toHaveLength(1);expect(run.commitments).toEqual([]);
-  const accepted=await x.send({...x.payload,answers:[...risks,evidence]});expect(accepted.statusCode,accepted.body).toBe(200);
-  const result=accepted.json<{run:SimRun;assessment:Assessment}>();expect(result.assessment.decision).toBe('approve');expect(result.run.purchases[0]!.answers).toHaveLength(3);expect(result.run.purchases[0]!.assessments).toHaveLength(2);
-  expect(result.assessment.results.find(r=>r.filter_id==='M11')?.evidence[0]?.source_type).toBe('human_review');
+  const rejected=await x.send({...x.payload,answers:x.answers.map(answer=>answer.question_id===question.question_id?{...answer,value:'green'}:answer)});
+  expect(rejected.statusCode,rejected.body).toBe(400);expect(rejected.json().error.code).toBe('RESPONSE_INVALID');expect(x.persisted()).toEqual(stored);
+  expect((await x.current()).purchases[0]!.answers).toEqual([]);
+  const accepted=await x.send();expect(accepted.statusCode,accepted.body).toBe(200);
+  const result=accepted.json<{run:SimRun;assessment:Assessment}>();expect(result.assessment.decision).toBe('approve');expect(result.run.purchases[0]!.answers).toHaveLength(3);
+  expect(result.run.purchases[0]!.answers.every(answer=>answer.value==='confirm'&&answer.source_ref===null&&answer.source_excerpt===null)).toBe(true);
+  const attribute=result.assessment.results.find(r=>r.filter_id==='M11')!;
+  expect(attribute.evidence.some(e=>e.source_type==='human_review')).toBe(true);
+  expect(attribute.reasons.every(reason=>reason.certainty==='uncertain')).toBe(true);
  });
 
- it('does not let a simple yes create a missing product fact',async()=>{
-  const x=await setup({evidence:true});const stored=x.persisted();
-  const response=await x.send({...x.payload,answers:x.answers.map(answer=>answer.source_ref?{...answer,value:' YES '}:answer)});
-  expect(response.statusCode,response.body).toBe(400);expect(response.json().error.code).toBe('G06_EVIDENCE_REQUIRED');expect(x.persisted()).toEqual(stored);
- });
-
- it('reevaluates supplied evidence and declines a certain mismatch despite confirmed risks',async()=>{
-  const x=await setup({evidence:true});
-  const response=await x.send({...x.payload,answers:x.answers.map(answer=>answer.source_ref?{...answer,source_excerpt:'Selected color: red.'}:answer)});
-  expect(response.statusCode,response.body).toBe(200);const result=response.json<{run:SimRun;assessment:Assessment}>();
-  expect(result.assessment.decision).toBe('deny');expect(result.assessment.blocking_filter_ids).toContain('M11');expect(result.run.commitments).toEqual([]);
+ it('rejects arbitrary text instead of interpreting it as acceptance',async()=>{
+  const x=await setup({evidence:true}),stored=x.persisted();
+  const response=await x.send({...x.payload,answers:x.answers.map(answer=>({...answer,value:' YES '}))});
+  expect(response.statusCode,response.body).toBe(400);expect(response.json().error.code).toBe('RESPONSE_INVALID');expect(x.persisted()).toEqual(stored);
  });
 
  it.each(['missing','duplicate','unknown'] as const)('rejects a %s pending-question response without recording any consent',async failure=>{

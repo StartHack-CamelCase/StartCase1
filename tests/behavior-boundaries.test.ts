@@ -8,7 +8,7 @@ it('requires fresh explicit consent when suspending a learned device introduces 
  const submitted=[{question_id:'country-question',value:'confirm'}];
  expect(()=>assertLiveAnswerCoverage(oldQuestions,submitted)).not.toThrow();
  const current=[...oldQuestions,{question_id:'device-question',kind:'confirm_risk'}] as Question[];
- expect(()=>assertLiveAnswerCoverage(current,submitted)).toThrow('confirmations changed');
+ expect(()=>assertLiveAnswerCoverage(current,submitted)).toThrow('purchase changed');
  expect(()=>assertLiveAnswerCoverage(current,[...submitted,{question_id:'device-question',value:'confirm'}])).not.toThrow();
  expect(()=>assertLiveAnswerCoverage(current,[...submitted,{question_id:'device-question',value:'reject'}])).toThrow();
  expect(()=>assertLiveAnswerCoverage(current,[...submitted,...submitted])).toThrow();

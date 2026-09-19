@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import vm from 'node:vm';
@@ -18,7 +19,7 @@ async function setup(){
  const mock=await createMockApi({stateDir:join(directory,'platform'),humanTimeoutMs:120000});
  const r={directory,mock,apps:[] as FastifyInstance[]};resources.push(r);
  let loseResolve=false,loseBeforeResolve=false,pauseReads=false;const resolves:string[]=[];const resolutionRequests:Array<{decision:string;reachedPlatform:boolean}>=[];
- const options:LocalAppOptions={stateDir:join(directory,'wallet'),outputDir:join(directory,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:{configured:false,model:'disabled',decode:async()=>{throw Error('No API');}},liveOptions:{environment:'mock',baseUrl:'http://127.0.0.1:4313',apiKey:LOCAL_MOCK_API_KEY,transport:async(path,init)=>{
+ const options:LocalAppOptions={stateDir:join(directory,'wallet'),outputDir:join(directory,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:configuredInstructionDecoder(),liveOptions:{environment:'mock',baseUrl:'http://127.0.0.1:4313',apiKey:LOCAL_MOCK_API_KEY,transport:async(path,init)=>{
   init?.signal?.throwIfAborted();
   if(pauseReads&&(path.startsWith('/v1/events')||path==='/v1/authorizations'))return new Response('{}',{status:503});
   if(path.endsWith('/resolve')){
@@ -34,7 +35,8 @@ async function setup(){
  const headers=await session(app);
  const scenario=(await app.inject('/api/wallet/options')).json().scenarios.find((s:{scenario_id:string})=>s.scenario_id==='SCEN0003');
  const prep=await app.inject({method:'POST',url:'/api/wallet/prepare',headers,payload:{scenario_id:'SCEN0003',instruction:scenario.instruction,mode:'live'}});
- const started=await app.inject({method:'POST',url:`/api/wallet/preparations/${prep.json().preparation_id}/confirm`,headers,payload:{confirmed:true,parameters:prep.json().config.parameters,mode:'live'}});
+ const ready=await readyWalletPreparation(async()=>(await app.inject(`/api/wallet/preparations/${prep.json().preparation_id}`)).json());
+ const started=await app.inject({method:'POST',url:`/api/wallet/preparations/${prep.json().preparation_id}/confirm`,headers,payload:{confirmed:true,parameters:ready.config!.parameters,mode:'live'}});
  expect(started.statusCode,started.body).toBe(200);
  const runId=started.json().run_id as string;
  await expect.poll(async()=>(await view(app,runId)).purchases.filter(p=>p.platform_status==='awaiting_human').length,{timeout:8000}).toBeGreaterThanOrEqual(2);

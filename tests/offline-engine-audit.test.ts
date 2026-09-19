@@ -189,11 +189,11 @@ describe('offline engine audit: temporal budgets and reservations', () => {
     expect(check(ctx, 'C11').outcome).toBe('fail');
   });
 
-  it('requires review for reserved mission capacity, and denies after it is committed', () => {
+  it('pauses for reserved mission capacity, and denies after it is committed', () => {
     const ctx = fixture('AU0001');
     ctx.config.parameters.mission_quantity = ctx.event.authorization.items.reduce((n, item) => n + item.quantity, 0);
     ctx.run.reservations = [{ ...commitment(ctx), offer_hash: 'OTHER', expires_at: '2026-09-20T00:00:00Z' }];
-    expect(check(ctx, 'C12').outcome).toBe('needs_review');
+    expect(check(ctx, 'C12').outcome).toBe('not_evaluated');
     expect(check(ctx, 'C14').outcome).toBe('pass');
     ctx.run.commitments = ctx.run.reservations;
     ctx.run.reservations = [];

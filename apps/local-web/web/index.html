@@ -12,6 +12,7 @@
     <title>Wallet control · Viseca</title>
     <link rel="stylesheet" href="/static/styles.css" />
     <link rel="stylesheet" href="/static/behavior-profiles.css" />
+    <link rel="stylesheet" href="/static/filter-documentation.css" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -33,8 +34,9 @@
         <nav class="primary-nav" aria-label="Main navigation">
           <a id="nav-scenarios" href="/">Wallet</a>
           <a id="nav-profiles" href="/wallet/profiles">Profiles</a>
+          <a id="nav-documentation" href="/documentation/filters">Documentation</a>
           <div class="data-mode-control">
-            <div class="data-mode-switch-row"><span id="offline-mode-label">Offline</span><button type="button" id="data-mode-switch" class="data-mode-switch" role="switch" aria-checked="false" aria-label="Use online API data" aria-describedby="data-mode-status"><span class="data-mode-switch__thumb" aria-hidden="true"></span></button><span id="online-mode-label">Online</span></div>
+            <div class="data-mode-switch-row"><span id="offline-mode-label">Offline</span><button type="button" id="data-mode-switch" class="data-mode-switch" role="switch" aria-checked="false" aria-label="Use online API data" aria-describedby="data-mode-status data-mode-description"><span class="data-mode-switch__thumb" aria-hidden="true"></span></button><span id="online-mode-label">Online</span></div>
             <span id="data-mode-status" class="data-mode-status" role="status">Offline · local data</span>
           </div>
         </nav>
@@ -44,6 +46,23 @@
     <div id="flash-region" class="flash-region" aria-live="polite" aria-atomic="true"></div>
 
     <main id="main-content" class="main-shell" tabindex="-1">
+      <aside class="mode-guide" aria-label="How this mode works">
+        <div aria-live="polite" aria-atomic="true">
+          <p id="data-mode-heading" class="mode-guide__title">Offline · Replay local purchases</p>
+          <p id="data-mode-description">Purchases come from the local demo data. Checks and decisions stay on this computer; nothing is sent to the Viseca API.</p>
+        </div>
+        <details class="mode-guide__details">
+          <summary>What changes between Offline and Online?</summary>
+          <div class="mode-guide__comparison">
+            <div><h2>Offline · Local replay</h2><p>Replay the sample purchases on this computer. Approvals, refusals and your confirmations are recorded locally.</p></div>
+            <div><h2>Online · API simulation</h2><p>Receive purchases from the test API and send decisions and your confirmations back to it. An approval is counted once the API accepts it. The local API emulator is labelled separately when used.</p></div>
+          </div>
+          <p>Both modes use the same spending rules and safety checks. Both use synthetic data: no real payments.</p>
+          <p>Activity, drafts and learned profiles stay separate. Switching modes changes the view; a run already started continues on the server.</p>
+          <p><strong>Offline describes the purchase source.</strong> If AI decoding is enabled, “Decode instruction” still uses OpenAI over the Internet in either mode. With AI disabled, permissions use the local parser.</p>
+          <p>The mode label identifies the selected source. It is not a connection test; API errors appear when a request fails.</p>
+        </details>
+      </aside>
       <div id="app" aria-live="polite" aria-busy="true"></div>
     </main>
 

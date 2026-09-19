@@ -9,6 +9,7 @@ const examples=[
  {id:'LOCAL_DEC_f471b167-c0df-44fb-ad61-2d0c6f750f50',description:'Cardholder requests shoe size 43.',qualifier:'Cardholder requests shoe size 43 and waterproof shoes.'},
  {id:'LOCAL_DEC_38fbbc61-e398-4662-8bf8-a0dd05420a31',description:'Pause if someone other than the cardholder appears to be driving the session',qualifier:'Pause if someone other than the cardholder appears to be driving the session and require a fingerprint.'},
  {id:'LOCAL_DEC_aa4fd332-8258-4274-a893-2bde33fc8243',description:'Requested product is a 27-inch monitor the cardholder chose.',qualifier:'Requested product is a 27-inch monitor the cardholder chose with a lifetime warranty.'},
+ {id:'LOCAL_DEC_445b5595-b164-434d-9fda-41bc2910fc6b',description:'Do not add anything not explicitly requested',qualifier:'Do not add anything not explicitly requested unless it is free.'},
 ];
 function sample(id:string){return structuredClone(saved.observed_variants.find(s=>s.decoding.decoding_id===id)!.decoding);}
 function prepare(decoding:InstructionDecoding){const ctx=fixture();return preparePermissions(ctx.pack,decoding.instruction,decoding,ctx.now);}
@@ -41,5 +42,13 @@ describe('source-grounded cardholder request paraphrases',()=>{
   const prepared=preparePermissions(ctx.pack,decoding.instruction,decoding,ctx.now);
   expect(prepared.config!.parameters.allowed_item_ids).toBeNull();
   expect(prepared.clarifications).toContainEqual(expect.objectContaining({diagnostic:expect.objectContaining({decoded_value:examples[2]!.description})}));
+ });
+
+ it('does not cover an extras prohibition whose source includes an exception',()=>{
+  const decoding=sample(examples[3]!.id),requirement=decoding.unmapped_requirements.find(r=>r.description===examples[3]!.description)!;
+  const amended='Do not add anything I did not ask for unless it is free.';
+  decoding.instruction=decoding.instruction.replace(requirement.source_excerpt,amended);
+  requirement.source_excerpt=amended;
+  expect(prepare(decoding).clarifications).toContainEqual(expect.objectContaining({diagnostic:expect.objectContaining({decoded_value:requirement.description})}));
  });
 });

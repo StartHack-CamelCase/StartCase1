@@ -12,6 +12,8 @@ import { liveHabitObservations,localHabitObservations,safeBehaviorProfile } from
 import { habitContext } from '../learning/behavior-profile.js';
 import { synchronizeBehaviorJournal, journalBehaviorProfile } from '../learning/behavior-journal.js';
 import { summarizeBehaviorComparisons } from '../learning/behavior-evaluation.js';
+import { collectBehaviorMLDataset } from '../learning/behavior-ml-projection.js';
+import { projectSimplePreferences } from '../learning/simple-preferences.js';
 import { permissionSummary } from './wallet-preparation.js';
 
 export class BehaviorProfileService {
@@ -53,12 +55,12 @@ export class BehaviorProfileService {
       samples.push({comparison,labels});
     }
     const reviews:NonNullable<BehaviorProfileDashboard['reviews']>=[];
-    const purchases=scope==='local'?runs.flatMap(r=>r.purchases.filter(p=>p.assessments.at(-1)?.decision==='approve').map(p=>({event:p.event,assessment:p.assessments.find(a=>a.behavior_learning?.comparison?.pre_human&&a.behavior_learning.applied_filter_ids.length),timezone:r.config.parameters.timezone}))):relevantEntries.filter(e=>e.accepted?.decision==='approve').map(e=>({event:e.event,assessment:e.proposal?.snapshot as Assessment|undefined,timezone:(e.proposal?.snapshot as Assessment|undefined)?.behavior_learning?.profile.timezone??timezone}));
+    const purchases=scope==='local'?runs.flatMap(r=>r.purchases.filter(p=>['approved','declined','cancelled','expired'].includes(p.assessments.at(-1)?.execution_state??'')).map(p=>({event:p.event,assessment:p.assessments.find(a=>a.behavior_learning?.comparison?.pre_human),timezone:r.config.parameters.timezone}))):relevantEntries.filter(e=>e.accepted?.decision==='approve'||e.accepted?.decision==='decline').map(e=>({event:e.event,assessment:e.proposal?.snapshot as Assessment|undefined,timezone:(e.proposal?.snapshot as Assessment|undefined)?.behavior_learning?.profile.timezone??timezone}));
     const reviewSeen=new Set<string>();
     for(const purchase of purchases){const a=purchase.assessment;if(!a?.behavior_learning?.comparison?.pre_human)continue;
-      for(const filter_id of a.behavior_learning.applied_filter_ids){const context_key=habitContext(filter_id,purchase.event,purchase.timezone);if(context_key===null)continue;const source_id=a.behavior_learning.comparison.source_id;const identity=JSON.stringify([source_id,filter_id]);if(reviewSeen.has(identity))continue;reviewSeen.add(identity);
+      for(const filter_id of a.behavior_learning.comparison.filters.filter(f=>f.baseline==='needs_review'&&(f.filter_id!=='C18'||(scope==='local'?runs.find(r=>r.purchases.some(p=>p.event.authorization.authorization_id===a.authorization_id))?.config.parameters.time_review===null:a.behavior_learning?.ml_features?.some(s=>s.filter_id==='C18')||a.behavior_learning?.applied_filter_ids.includes('C18')))).map(f=>f.filter_id)){const context_key=habitContext(filter_id,purchase.event,purchase.timezone);if(context_key===null)continue;const source_id=a.behavior_learning.comparison.source_id;const identity=JSON.stringify([source_id,filter_id]);if(reviewSeen.has(identity))continue;reviewSeen.add(identity);
         const review=journal.reviews?.filter(r=>r.customer_id===customerId&&r.scope===scope&&r.source_id===source_id&&r.filter_id===filter_id).at(-1);
-        reviews.push({authorization_id:a.authorization_id,source_id,filter_id,context_key,occurred_at:a.scenario_timestamp,verdict:review?.verdict??null});
+        reviews.push({authorization_id:a.authorization_id,source_id,filter_id,context_key,occurred_at:a.scenario_timestamp,was_suppressed:a.behavior_learning.applied_filter_ids.includes(filter_id),verdict:review?.verdict??null});
       }
     }
     const report=summarizeBehaviorComparisons(samples,{dataset_id:`profile:${customerId}:${scope}`,kind:'observed',description:'Observed prototype decisions. Automatic approvals have no correctness label.'});
@@ -72,6 +74,18 @@ export class BehaviorProfileService {
       notice:'Synthetic customer profile. Habits use explicit confirmations; evidence weight is not a safety probability. The profile date follows the last simulated purchase. Saved permissions remain mandatory. Suppressed alerts without a later explicit check remain unverified.'};
   }
 
+  async detailWithML(scenarioId:string,scope:BehaviorScope):Promise<BehaviorProfileDashboard> {
+    const view=this.detail(scenarioId,scope);
+    const state=this.simulations.store.select(s=>({schema_version:1,configs:s.configs,runs:s.runs,commands:{},...(s.behavior_journal?{behavior_journal:s.behavior_journal}:{})}) as SimulationDocument);
+    const entries=this.liveEntries();
+    const journal=synchronizeBehaviorJournal(state,[...localHabitObservations(state.runs),...liveHabitObservations(entries)]);
+    const asOf=this.clock().toISOString();
+    const dataset=collectBehaviorMLDataset(state,entries,journal,scope,asOf,{includeSuspendedLabels:true});
+    // Simple per-profile counts: no optimization, worker or model loading.
+    view.simple_preferences=projectSimplePreferences(dataset,journal,view.customer_id,scope,asOf);
+    return view;
+  }
+
   feedback(input:BehaviorFeedbackRequest,actor:HumanActor,key:string):BehaviorProfileDashboard {
     const customerId=this.customer(input.scenario_id);
     if(actor.customer_id!==customerId||actor.role!=='simulated_human'||actor.channel!=='local_ui'||actor.authenticated_by_server!==true)throw new AppError(403,'PROFILE_OWNER_REQUIRED','Open this customer profile before reviewing its habits.');
@@ -80,7 +94,7 @@ export class BehaviorProfileService {
     const source=view.reviews?.find(r=>r.authorization_id===input.authorization_id&&r.filter_id===input.filter_id);
     const live=liveHabitObservations(this.liveEntries());
     this.simulations.store.transaction(key,{action:'behavior-feedback',input,actor},state=>{
-      if(!source)throw new AppError(404,'PROFILE_REVIEW_NOT_FOUND','Choose a saved learned decision to review.');
+      if(!source)throw new AppError(404,'PROFILE_REVIEW_NOT_FOUND','Choose a completed behavioral context to review.');
       const journal=synchronizeBehaviorJournal(state,[...localHabitObservations(state.runs),...live]);
       if(journal.sequence!==input.expected_revision)throw new AppError(409,'PROFILE_REVISION_CONFLICT','The profile changed. Refresh it and review this action again.');
       const at=this.clock().toISOString();

@@ -1,412 +1,147 @@
 # Structure de données
 
-Statut : conception du socle offline, conformément au [cadrage actuel](00_SOCLE_ET_PLACE_IA.md). Les contrats fournis restent inchangés. Les types applicatifs sont nouveaux ; les critères métier et le choix du modèle restent à définir avec l’équipe. Les contrats de décision préparent une étape ultérieure, pas une obligation de construire maintenant le moteur complet.
+Cette page décrit les données utilisées par le code actuel : pack CSV, permissions, achats évalués, profils comportementaux et stockage local. Les définitions complètes sont dans [packages/contracts/src](../packages/contracts/src/index.ts) ; les schémas du pack et les types applicatifs ont des rôles distincts.
 
-## 1. Quatre couches de données
+## Pack de référence
 
-| Couche | Contenu | Propriétaire |
-| --- | --- | --- |
-| Référentiels et fixtures | CSV, schémas et manifeste existants | Pack, en lecture seule |
-| Permissions | Brouillon, confirmation, mandat, versions | Client via l'application locale |
-| Exécution | Run, événement canonique, faits calculés, décisions, réponses humaines | Runtime local et moteur |
-| Présentation et audit | Vues du site, journaux, résumé du run | Projections des données précédentes |
+Le dossier [data](../data/README.md) contient le pack synthétique `saw26`, fourni avec le challenge. Son [dictionnaire](../data/data_dictionary.md) précise les colonnes et leur sémantique. [metadata.json](../data/metadata.json) référence 18 fichiers avec leurs empreintes SHA-256, dont les deux documents du pack.
 
-```mermaid
-erDiagram
-    CUSTOMER ||--o{ ACCOUNT : possede
-    ACCOUNT ||--o{ CARD : contient
-    CARD ||--o{ HISTORY : historique
-    MERCHANT ||--o{ HISTORY : concerne
-    SCENARIO ||--|{ ATTEMPT : ordonne
-    AUTHORITY ||--|{ ATTEMPT : autorise_fixture
-    CUSTOMER ||--o{ AUTHORITY : identifie
-    CARD ||--o{ AUTHORITY : identifie
-    CARD ||--o{ ATTEMPT : concerne
-    MERCHANT ||--o{ ATTEMPT : propose
-    ATTEMPT ||--|{ ATTEMPT_ITEM : contient
-    ITEM ||--o{ ATTEMPT_ITEM : reference
-    POLICY_DRAFT ||--o| MANDATE : confirmation
-    MANDATE ||--o{ RUN : snapshot
-    SCENARIO ||--o{ RUN : rejoue
-    RUN ||--o{ AUTHORIZATION_RECORD : execute
-    ATTEMPT ||--o{ AUTHORIZATION_RECORD : origine
-    AUTHORIZATION_RECORD ||--o{ AUDIT_ENTRY : transitions
+| Fichier | Lignes | Clé et relations principales |
+| --- | ---: | --- |
+| `customers.csv` | 20 | `customer_id` ; contexte et préférences de la persona |
+| `accounts.csv` | 31 | `account_id` → `customer_id` ; devise, statut et limites du compte |
+| `cards.csv` | 41 | `card_id` → `account_id` ; statut, dates et capacités de la carte |
+| `merchants.csv` | 58 | `merchant_id` ; nom, catégorie, MCC, pays, ville et capacités |
+| `items.csv` | 66 | `item_id` ; description et fourchettes de prix en CHF |
+| `fx_rates.csv` | 4 | `from_currency` → CHF ; taux fixes CHF/EUR/GBP/USD |
+| `authorization_history.csv` | 4 701 | `authorization_id` (`TR…`) → client, compte, carte et marchand |
+| `scenario_catalogue.csv` | 5 | `scenario_id` ; instruction, thème et nombre de tentatives |
+| `scenario_authorities.csv` | 5 | `authority_id` → client et carte ; validité de la fixture |
+| `purchase_attempts.csv` | 45 | `authorization_id` (`AU…`) → scénario, autorité, carte et marchand |
+| `purchase_attempt_items.csv` | 56 | `(authorization_id, line_no)` → tentative et `item_id` |
+
+```text
+Customer ──< Account ──< Card ──< HistoricalAuthorization
+                           └──< SourceAttempt >── Scenario
+                                      ├── FixtureAuthority ── Customer / Card
+                                      ├── Merchant
+                                      └──< SourceAttemptItem >── CatalogueItem
 ```
 
-Une autorité de fixture n'est pas un mandat. Une tentative source n'est pas son exécution. Un même scénario peut être rejoué plusieurs fois avec des décisions différentes.
+Les jointures utilisent les identifiants, jamais les noms. `scenario_authorities.csv` ne contient pas de `scenario_id` : le lien passe par les tentatives. Une autorité `AUTH…` décrit une fixture ; un mandat est une permission confirmée. `related_transaction_id` relie deux lignes historiques `TR…`, tandis que `related_authorization_id` relie deux tentatives `AU…`.
 
-## 2. Types communs et référentiels
+Les cinq scénarios contiennent respectivement 1, 10, 12, 11 et 11 tentatives (`SCEN0000` à `SCEN0004`). Le fichier `connection_check.json` reprend `AU0001` ; il ne constitue pas une tentative supplémentaire.
 
-```ts
-type Currency = "CHF" | "EUR" | "GBP" | "USD";
-type ISODate = string;       // YYYY-MM-DD, validé à l'entrée
-type ISODateTime = string;   // ISO 8601 UTC, validé à l'entrée
-type DecimalString = string; // montant sérialisé, ex. "245.28"
-type Term = "true" | "false" | "unknown" | "not_applicable";
-type Decision = "approve" | "decline" | "step_up";
-type UncertaintyPolicy = "ask" | "decline" | "approve";
-```
+### Chargement et types normalisés
 
-Les identifiants restent des chaînes opaques. Des alias TypeScript distincts (`CardId`, `RunId`, `SourceAuthorizationId`, etc.) évitent de les échanger. Aucun identifiant n'est obtenu en incrémentant un ID du catalogue.
+Le [loader](../packages/local-runtime/src/data/loader.ts) valide le manifeste, les empreintes, les en-têtes et nombres de lignes, les valeurs, les clés étrangères, l'identité client/carte des autorités, la chronologie et les montants. Les contrats CSV proviennent de [data_pack.schema.json](../data/schemas/data_pack.schema.json) et [authorization_history.schema.json](../data/schemas/authorization_history.schema.json).
 
-Les en-têtes exacts sont définis dans [data_pack.schema.json](../data/schemas/data_pack.schema.json). Les types de l'historique sont dans [authorization_history.schema.json](../data/schemas/authorization_history.schema.json). Ses extensions `x-csv-column-contract` et celles du pack doivent être interprétées par le loader : valider simplement le JSON du manifeste ne valide pas les CSV.
+[DataPack](../packages/contracts/src/data.ts) contient les tableaux normalisés ainsi que les index `customersById`, `accountsById`, `cardsById`, `merchantsById`, `itemsById`, `scenariosById`, `authoritiesById`, `fxByCurrency`, `attemptsByScenario`, `itemsByAttempt` et `historyByCard`. Les tentatives sont triées par `replay_order`, les paniers par `line_no` et l'historique par `(timestamp, authorization_id)`. Chaque ligne normalisée porte `source: { file, row }` pour retrouver le CSV d'origine.
 
-| Entité / clé | Champs à conserver et types normalisés | Relation / usage |
-| --- | --- | --- |
-| `Customer` / `customer_id` | `persona_name`, `home_region`, `background`, `shopping_preferences`, `typical_spending`, `budget_style`, `travel_pattern` : chaînes | Contexte descriptif, aucune règle implicite |
-| `Account` / `account_id` | `customer_id`, `account_type`, `account_purpose`, `base_currency`, `status`, `opened_on`, `per_transaction_limit_chf`, `monthly_limit_chf` | FK client ; dates validées, limites décimales ; pas de solde disponible |
-| `Card` / `card_id` | `account_id`, `card_type`, `card_purpose`, `status`, `first_used_on`, `expires_on`, `online_enabled`, `international_enabled`, `virtual_card` | FK compte ; dates validées, trois vrais booléens internes ; statut actuel `active/blocked/expired` |
-| `Merchant` / `merchant_id` | `merchant_name`, `merchant_category`, `merchant_mcc`, `merchant_country`, `merchant_city`, `availability`, `recurring_capable` | MCC chaîne de 4 chiffres ; `recurring_capable` reste `"true"/"false"` dans le contrat événement |
-| `Item` / `item_id` | `item_name`, `item_category`, `item_description`, trois `unit_price_*_chf` | Fourchettes décimales en CHF, indicatives |
-| `FxRate` / `from_currency` | `to_currency`, `rate`, `rate_date`, `source` | Taux Decimal conservant ses 6 décimales ; cible CHF |
-| `Scenario` / `scenario_id` | `scenario_name`, `cardholder_instruction`, `control_question`, `control_theme`, `event_count`, `short_rationale` | `event_count` entier ; instruction exacte conservée |
-| `FixtureAuthority` / `authority_id` | `customer_id`, `card_id`, `valid_from`, `valid_until`, `initial_status` | Client et carte, timestamps simulés ; aucun `scenario_id` dans ce fichier |
-| `SourceAttempt` / `authorization_id` source `AU…` | Toutes les 25 colonnes du CSV ; prix décimaux, compteurs entiers, champs nullable normalisés | FK scénario, autorité, carte, marchand ; auto-référence `related_authorization_id` |
-| `SourceAttemptItem` / `(authorization_id, line_no)` | `item_id`, `item_name`, `item_category`, `quantity`, `unit_price`, `currency`, `item_details` | FK tentative et produit ; numéro de ligne et quantité entiers ≥ 1 |
-| `HistoricalAuthorization` / `authorization_id` historique `TR…` | Les 40 colonnes documentées, y compris type, initiateur, résultat, appareil, compteurs et `related_transaction_id` nullable | FK client/compte/carte/marchand ; remboursement vers un `TR…` |
+- `Currency` vaut `CHF | EUR | GBP | USD`. `DecimalString`, `ISODate` et `ISODateTime` sont des chaînes ; le chargement contrôle leurs valeurs. Les dates utilisent `YYYY-MM-DD`, les timestamps ISO 8601 UTC.
+- Les montants CSV restent des chaînes décimales. Les calculs et contrôles monétaires utilisent `decimal.js`, avec arrondi à deux décimales en half-even pour la conversion CHF. La devise provient de la ligne, pas du pays marchand.
+- Les capacités des cartes et les indicateurs historiques sont convertis en booléens. `recurring_capable` reste `"true" | "false"`. Les conditions d'achat utilisent `"true" | "false" | "unknown" | "not_applicable"`.
+- Les champs facultatifs vides deviennent `null`, notamment les appareils absents de l'historique, les dates de livraison et les références liées. Les 45 valeurs `spend_in_period_before_chf` sont absentes. Le champ CSV `fx_rates.source` devient `source_name` pour laisser `source` à la provenance.
 
-Toutes les lignes sont chargées une fois. Index minimaux : `customersById`, `accountsById`, `cardsById`, `merchantsById`, `itemsById`, `authoritiesById`, `scenariosById`, `fxByCurrency`, `attemptsByScenario`, `itemsByAttempt`, `historyByCard`. Les tentatives sont triées par `replay_order`, l'historique par `(timestamp, authorization_id)` et les paniers par `line_no`.
+L'historique comprend 4 565 achats, 83 retraits et 53 remboursements, du 1er septembre 2025 au 31 juillet 2026. Ses 259 refus ne sont pas des labels de fraude. Les compteurs `approved_*_before` sont calculés sur les lignes approuvées strictement antérieures de la même carte ; les remboursements réduisent la dépense. `approved_spend_before_chf` couvre tout l'historique, pas un mois. Le statut historique d'une carte est celui de la transaction, tandis que `cards.csv.status` décrit son statut courant.
 
-Valider les clés et les relations, mais aussi `authority.customer_id = account.customer_id` et `authority.card_id = attempt.card_id`. Une jointure manquante arrête le chargement avec le fichier, la ligne et le champ concernés.
+## Permissions et préparation du wallet
 
-## 3. Permissions : du brouillon au snapshot
+Les contrats sont définis dans [policy.ts](../packages/contracts/src/policy.ts), [instruction-decoding.ts](../packages/contracts/src/instruction-decoding.ts) et [wallet.ts](../packages/contracts/src/wallet.ts).
 
-```ts
-type HardRule = {
-  field: string;
-  operator: "<" | "<=" | "=" | "!=" | ">" | ">=" | "in" | "not_in";
-  value: number | string | string[];
-  currency?: Currency | null;
-  scope?: "purchase" | "period" | null;
-  period_days?: number | null;
-};
-
-type PolicyContent = {
-  instruction: string;
-  hard_rules: HardRule[];
-  uncertainty_policy: UncertaintyPolicy;
-  guidance: string[];
-  open_questions: string[];
-};
-
-type Interpretation = {
-  status: "not_started" | "partial" | "reviewed";
-  producer: "manual" | "fixture" | "model" | null;
-  version: string | null;
-  model_id: string | null;
-  requirements: Array<{
-    requirement_id: string;
-    source_excerpt: string;
-    description: string | null;
-    status: "pending" | "mapped";
-    rule_indexes: number[]; // indices des règles proposées ; vide si non interprété
-  }>;
-};
-
-type PolicyDraft = PolicyContent & {
-  interpretation: Interpretation;
-  draft_id: string;
-  source_scenario_id: string; // provenance locale ; pas une règle
-  created_at: ISODateTime;
-  compiler_version: string | null; // null tant que non configuré
-  validation_errors: Array<{ field: string; message: string }>;
-};
-
-type MandateRecord = PolicyContent & {
-  interpretation: Interpretation;
-  mandate_id: string;
-  draft_id: string;
-  source_scenario_id: string;
-  version: number;
-  status: "active" | "revoked";
-  confirmed_at: ISODateTime;
-  confirmation_origin: "local_user" | "test_script";
-  updated_at: ISODateTime;
-  revoked_at: ISODateTime | null;
-  compiler_version: string | null; // null tant que non configuré
-};
-```
-
-`HardRule` reproduit le format officiel. Sa valeur ne peut pas être un booléen, un objet, `null` ou une liste de nombres. Aucun champ supplémentaire n'est ajouté à cette règle.
-
-Au départ, conserver le texte original dans un brouillon avec `interpretation.status="not_started"`. Aucun modèle n'extrait automatiquement les cinq politiques. Une saisie manuelle ou une fixture explicitement marquée permet de tester le stockage et l'interface. Le futur interpréteur proposera des règles et des exigences en attente, puis la revue humaine vérifiera leur sens. La validation JSON ne prouve pas que toutes les restrictions du texte sont couvertes.
-
-`hard_rules: []` ne signifie jamais « tout autoriser » lorsque l'interprétation n'est pas terminée. Confirmer le texte pour le parcours d'inspection n'autorise aucune décision automatique. Le mode d'évaluation futur exige une interprétation revue, une couverture des exigences vérifiée et un évaluateur configuré. Aucune exigence non interprétée n'est silencieusement perdue.
-La création conserve `cardholder_instruction` à l'identique. Les préférences des personas, les thèmes et les descriptions de scénarios ne sont pas ajoutés silencieusement à la politique. La confirmation crée un mandat actif. Son identité client/carte/profil est liée **au démarrage du run**, via l'autorité du scénario ; elle ne vient pas du formulaire de permissions.
-
-Le snapshot transmis dans l'événement est **uniquement** le `mandate` du schéma officiel : `mandate_id`, `status`, `customer_id`, `card_id`, `instruction`, `hard_rules`, `uncertainty_policy`, `profile_id`. `guidance`, `open_questions`, `version`, `compiler_version` et `interpretation` restent dans le stockage applicatif. Un run conserve sa copie et son numéro de version.
-
-Modification active : préserver toutes les anciennes règles et ajouter seulement des restrictions combinées par ET. Conserver le choix d'incertitude ou passer de `approve/ask` à `decline`. Une règle existante à 200 CHF reste présente si l'on ajoute une limite à 180 CHF. Modifier librement ou assouplir nécessite un nouveau brouillon confirmé. Cela respecte les restrictions de PATCH documentées, sans devoir démontrer l'équivalence de deux politiques arbitraires.
-
-## 4. Événement canonique et adaptation CSV
-
-`AuthorizationEvent` est dérivé de [authorization_event.schema.json](../data/schemas/authorization_event.schema.json), sans second format offline. C'est l'objet `data` d'une future enveloppe Viseca, pas l'enveloppe entière.
-
-| Bloc | Contenu et contraintes importantes |
+| Objet | Données conservées |
 | --- | --- |
-| Racine | `type: "authorization.request"`, `request_id`, `deadline_at`, `authorization`, `mandate`, `context`, `runtime` |
-| `authorization` : identité | ID du run pour l'achat, `source_authorization_id`, `scenario_id`, `replay_order`, `mandate_id`, `profile_id`, `card_id`, `initiator_type: "agent"` |
-| `authorization` : faits | Marchand imbriqué, timestamp simulé, prix et devise, sous-total, livraison, canal, appareil, statuts autorité/carte, période source, vélocité, fulfillment, date de livraison, retours/annulation, lien d'achat, description et panier |
-| `merchant` | Les huit champs du catalogue marchand ; aucune identité basée sur son nom |
-| `items[]` | Les huit champs de la ligne panier, sans son `authorization_id` source ; tableau non vide |
-| `mandate` | Snapshot lié au run décrit ci-dessus |
-| `context` | `approved_spend_in_period_chf: number \| null`, `recent_authorizations[]` avec ID, timestamp, marchand, montant CHF et statut |
-| `runtime` | `received_at`, `history_window_minutes`, `context_basis: "run_decisions_and_scenario_timestamps"` |
+| `PolicyContent` | `instruction`, `hard_rules`, `uncertainty_policy`, `guidance`, `open_questions` |
+| `PolicyDraft` | Contenu, `draft_id`, `source_scenario_id`, interprétation, dates de création/mise à jour, erreurs de validation ; `compiler_version: null` |
+| `MandateRecord` | Contenu confirmé, IDs du brouillon et du mandat, scénario source, version, statut `active/revoked`, dates et origine `local_user/test_script` |
+| `Interpretation` | Statut `not_started/partial/reviewed`, producteur `manual/fixture/model`, versions et exigences reliées aux indices des règles ; décodage facultatif |
+| `InstructionDecoding` | Variables extraites, exigences non mappées, inventaire de couverture facultatif, instruction exacte, versions, hash du schéma, modèle demandé/retourné, ID de réponse, durée et consommation de tokens |
+| `WalletPreparation` | Statut `processing/ready/failed`, mode `local/live`, scénario et instruction, environnement live, décodage, configuration proposée, permissions affichées, clarifications et avertissements |
 
-Règles de construction :
+Une `HardRule` possède `field`, un opérateur parmi `<`, `<=`, `=`, `!=`, `>`, `>=`, `in`, `not_in`, et `value: number | string | string[]`. `currency`, `scope: purchase/period` et `period_days` sont facultatifs et peuvent être `null`. `uncertainty_policy` vaut `ask`, `decline` ou `approve`.
 
-1. Sélectionner les tentatives du scénario et toutes leurs lignes, puis joindre autorité → carte → compte → client et marchand.
-2. Vérifier les identités ; employer les statuts au moment de la tentative et les dates simulées. Ne pas réécrire l'historique avec le statut actuel des cartes.
-3. Supprimer les champs source non admis : `authority_id` et `merchant_id` à plat n'existent pas dans `authorization` canonique ; le marchand est imbriqué.
-4. Convertir montants en nombres JSON et compteurs en entiers. Garder les enums textuels, dont `order_returnable` et `recurring_capable`.
-5. Conserver les champs nullable avec `null` : date de livraison, période source, achat lié et son statut. Les 45 valeurs de `spend_in_period_before_chf` restent `null`, jamais remplacées par zéro.
-6. Ajouter les IDs locaux, le mandat lié et le contexte calculé **avant** la tentative courante.
-7. Remapper les références `AU…` vers les IDs locaux du même run. Conserver le statut lié fourni comme fait source ; consulter le registre local pour le résultat effectif si cet achat y existe. En cas de divergence, tracer les deux, sans réécrire l'événement déjà reçu.
-8. À l'émission, fixer `received_at` et un nouveau `deadline_at` réel ; valider strictement avec Ajv 2020 et le support des formats date/date-time. Les champs inconnus sont refusés, pas effacés silencieusement.
+Les `DecodedVariable` distinguent `present`, `absent` et `ambiguous`, avec valeur, opérateur, devise, portée, extrait de l'instruction et note. Les champs d'interprétation et de diagnostic restent dans les données applicatives ; ils ne font pas partie du mandat canonique envoyé dans un événement.
 
-Les prix JSON sont des nombres car le schéma l'exige. Les calculs utilisent `Decimal`, créé depuis les chaînes CSV ou la représentation décimale des nombres reçus. Arrondir à deux décimales en half-even ; sérialiser les totaux applicatifs en `DecimalString`.
+Les clarifications du wallet portent une clé, un libellé, un type `text/number/select/items`, une valeur, un indicateur obligatoire et, si nécessaire, des options ou un diagnostic. Les interprétations monétaires distinguent `maximum`, `minimum`, `exact`, `approximate`, `range` et `description`. Une plage explicite conserve `min_order_chf` et `max_order_chf`. La confirmation mémorise l'empreinte, les paramètres confirmés, l'acteur et les IDs créés.
 
-```text
-sous-total = somme(quantity × unit_price)
-total = sous-total + livraison             // dans la monnaie de la commande
-total CHF = arrondi_half_even(total × taux, 2)
-```
+## Événement d'autorisation
 
-Tous les paniers du pack utilisent la monnaie de leur commande. Un panier mixte futur est rejeté par le validateur de notre adaptateur tant que sa méthode de conversion n'est pas définie. Ni le pays marchand ni la fourchette de prix catalogue ne changent ces calculs.
+[AuthorizationEvent](../packages/contracts/src/event.ts) correspond au [schéma JSON canonique](../data/schemas/authorization_event.schema.json). L'[exemple fourni](../data/scenario_fixtures/example_authorization_request.json) montre un objet complet ; dans le transport live, cet objet est contenu dans `data` de l'enveloppe.
 
-## 5. Interfaces pour l'interprétation et le traitement futur
+| Bloc | Contenu |
+| --- | --- |
+| Racine | `type: authorization.request`, `request_id`, `deadline_at` |
+| `authorization` | IDs runtime et source, scénario et ordre de replay, mandat/profil/carte, marchand imbriqué, timestamp simulé, montants, canal/appareil, statuts, livraison, retours, annulation, achat lié, description et `items[]` |
+| `mandate` | `mandate_id`, `status`, `customer_id`, `card_id`, `instruction`, `hard_rules`, `uncertainty_policy`, `profile_id` |
+| `context` | `approved_spend_in_period_chf`, `recent_authorizations[]` |
+| `runtime` | `received_at`, `history_window_minutes`, `context_basis: run_decisions_and_scenario_timestamps` |
 
-L'IA éventuelle est derrière des interfaces injectées par l'application. Aucun choix de fournisseur, aucun seuil de risque ni dictionnaire exhaustif de critères n'est fixé maintenant.
+Les montants de l'événement sont des nombres JSON. Chaque article porte `line_no`, `item_id`, `item_name`, `item_category`, `quantity`, `unit_price`, `currency`, `item_details`. La description du catalogue reste séparée de ces conditions d'offre.
 
-```ts
-type Observation = {
-  key: string; // nom enregistré par l'analyseur, ex. item.color
-  subject: "purchase" | "item" | "merchant" | "session";
-  line_no: number | null;
-  state: "observed" | "missing" | "ambiguous";
-  value: string | number | boolean | null;
-  unit: string | null;
-  source_fields: string[]; // chemins vers les champs d'origine
-  producer: { id: string; version: string; kind: "code" | "model" | "manual" | "fixture" };
-};
+L'[adaptateur CSV](../packages/local-runtime/src/data/event-builder.ts) joint marchand et panier, lie le snapshot du mandat à l'identité du scénario et valide l'événement avec Ajv. Il remappe les références `AU…` vers les IDs runtime du même run. Un appareil absent devient une chaîne vide dans ce contrat. Il conserve `related_authorization_status` comme fait source.
 
-type EvaluationFacts = {
-  schema_version: 1;
-  status: "not_configured" | "partial" | "complete";
-  observations: Observation[];
-  issues: Array<{ code: string; message: string; source_fields: string[] }>;
-};
+L'adaptateur initialise `context.approved_spend_in_period_chf` à `null`. L'évaluateur local calcule les budgets à partir de son registre de dépenses et réservations ; il ne dépend pas de ce compteur de l'événement. Le mock et la plateforme live produisent leur propre contexte de décisions. `authorization.timestamp` est le temps simulé de l'achat ; `received_at` et `deadline_at` utilisent l'horloge réelle.
 
-type EvaluationResult =
-  | { status: "not_evaluated"; reason: string }
-  | { status: "evaluated"; result: DecisionResult };
+## Évaluation, registre et réponses humaines
 
-interface PolicyInterpreter {
-  interpret(input: { instruction: string }): Promise<{
-    hard_rules: HardRule[];
-    uncertainty_policy: UncertaintyPolicy | null; // proposition, à confirmer
-    guidance: string[];
-    open_questions: string[];
-    interpretation: Interpretation;
-  }>;
-}
+[simulation.ts](../packages/contracts/src/simulation.ts) décrit les objets utilisés par l'[évaluateur](../packages/local-runtime/src/simulation/evaluator.ts) et le [service de simulation](../packages/local-runtime/src/simulation/service.ts).
 
-interface PurchaseAnalyzer {
-  analyze(input: {
-    event: AuthorizationEvent;
-    history: ReadonlyArray<HistoricalAuthorization>;
-    prior_authorizations: ReadonlyArray<AuthorizationRecord>;
-  }): Promise<EvaluationFacts>;
-}
+| Objet | Structure et rôle |
+| --- | --- |
+| `SafetyConfig` | `schema_version: 1`, IDs et versions de configuration/mandat, instruction et hash, statut `draft/confirmed`, exigences, paramètres, acteur et dates de confirmation |
+| `SafetyParameters` | Bornes d'achat, budgets glissants/journaliers/mensuels, devises et marchands autorisés/bloqués, catégories/pays, articles/attributs/quantités, livraison/retours/annulation, historique/appareil, signaux comportementaux, revue humaine, durée du consentement et fuseau horaire |
+| `Requirement` | Extrait source, description, filtres et paramètres concernés, statut `pending/confirmed`, question, auteur et révision |
+| `SimRun` | Identité et snapshot du mandat, configuration, `budget_scope_id`, statut `active/completed/revoked`, position/révision, historique et hash, achats, engagements, réservations et audit |
+| `SimPurchase` | Événement canonique, historique des `assessments`, réponses humaines |
+| `Assessment` | Décision, état d'exécution, complétude, possibilité de finalisation, snapshots et hashes, résultats de filtres, preuves, questions, verrou, versions, timestamps et corrélation |
+| `Commitment` | Achat engagé : ID, montant CHF en chaîne, timestamp simulé, quantité et portée budgétaire |
+| `Reservation` | Même structure qu'un engagement, plus hash d'offre et expiration ; capacité réservée avant décision finale |
+| `AuditEntry` | Séquence, temps réel/simulé, acteur, événement, IDs achat/évaluation, filtres, détails et corrélation |
 
-interface DecisionEvaluator {
-  evaluate(input: {
-    event: AuthorizationEvent;
-    interpretation: Interpretation;
-    facts: EvaluationFacts;
-  }): EvaluationResult;
-}
-```
+`Assessment.decision` vaut `approve | deny | step_up | null`. `execution_state` vaut `evaluating | awaiting_user | technical_hold | approved | declined | cancelled | expired`. Un `SimRun` devient `completed` lorsque toutes les propositions ont été émises ; des achats peuvent encore attendre une réponse.
 
-Les types d'événement et d'historique viennent des schémas fournis ; les autres objets sont décrits ici. Ces interfaces sont un point de branchement minimal. Les entrées sont des snapshots en lecture seule, jamais des services permettant de modifier le mandat ou les décisions. Les versions futures pourront ajouter des analyseurs sans changer les routes.
+Les filtres actifs sont déclarés dans `MERCHANT_FILTER_IDS`, `CUSTOMER_FILTER_IDS` et `GUARD_FILTER_IDS`. Un `FilterResult` indique le domaine, le type de contrôle, la phase (`prepare/assess/resolve/commit`), le résultat (`pass/fail/needs_review/not_applicable/not_evaluated`), la couverture et les raisons. Les `Evidence` relient chaque preuve à une source, un champ, un hash, un extrait et des valeurs observées/attendues. Les `Reason` indiquent notamment l'effet et le type de résolution attendu.
 
-Le service de permissions appelle l'interpréteur, valide sa sortie et la présente comme brouillon. Le runtime prépare les données, appelle les analyseurs, puis l'évaluateur. Les appels éventuels à un LLM restent dans les adaptateurs d'interprétation/analyse ; la validation et la gestion d'état ne dépendent pas de sa présence.
+Une `Question` est liée à un fait, à des filtres et au hash de l'offre. Une `HumanAnswer` ajoute la valeur, les éventuelles preuves, l'acteur vérifié côté serveur, la révision de configuration, l'expiration et l'évaluation qui a consommé le consentement. Le `PurchaseLock` conserve le blocage `denied_version`, `pending_step_up` ou `technical_hold` et ses raisons. Une approbation crée un engagement ; une demande de revue peut réserver la capacité disponible.
 
-`Observation.key` n'autorise pas un JSON incontrôlé : chaque analyseur déclare les clés qu'il produit et leur type, et ses sorties sont validées. Les montants normalisés utilisent des chaînes décimales accompagnées de leur devise. Ajouter la couleur, par exemple, ajoutera une observation avec une source et un analyseur identifié ; aucune colonne n'est inventée dans les CSV. Les états `missing/ambiguous` conservent `value=null`. Les versions et la couverture des exigences doivent être vérifiées avant de traiter une analyse comme suffisante pour décider.
+### Inspection et transport live
 
-Conserver `purchase_description`, `items[].item_name`, `items[].item_details` et, séparément, `items.csv.item_description`. Les conditions propres à une tentative ne sont pas remplacées par le texte générique du catalogue. Une taille, couleur ou caractéristique absente reste absente. Les textes marchands ne peuvent jamais écrire une permission.
+Les [runs d'inspection](../packages/contracts/src/run.ts) utilisent un contrat séparé : `RunRecord.mode` vaut uniquement `inspection`. Leurs achats restent `pending` ou deviennent `cancelled`, avec `evaluation_status: not_evaluated`. `RunView.total_approved_chf` vaut `"0.00"`. Les identifiants sont `LOCAL_RUN_{clé}`, `LOCAL_AUTH_{clé}_{AU…}`, `LOCAL_REQ_{clé}_{AU…}` et `LOCAL_PROFILE_{clé}` ; les simulations utilisent un ID de run `SIM_{UUID}`.
 
-L'implémentation initiale de l'interpréteur renvoie une interprétation non commencée ; l'analyseur retourne `not_configured` ; l'évaluateur retourne `not_evaluated`. Des doubles de test permettent de vérifier les appels et les transitions, avec une provenance explicite. Un branchement vide ne retourne ni `approve`, ni `decline`, ni `step_up` automatiquement.
+Le transport live conserve un [LiveBinding](../packages/local-runtime/src/simulation/live-engine.ts) contenant la configuration confirmée, le mandat distant, le scénario, les règles, le hash d'historique et la version du pack. Chaque [LiveEntry](../packages/local-runtime/src/simulation/viseca-worker.ts) contient l'événement, le snapshot, la proposition locale, l'intention d'envoi, le résultat accepté, la réservation, la limite de réponse humaine et l'historique de transport. Ses états sont `proposed`, `intended`, `submission_unknown`, `accepted`, `deadline_missed` et `awaiting_human`. Le transport convertit `deny` en `decline`.
 
-Les comparaisons de prix, taille, couleur, retours, description et contexte marchand seront conçues ensuite avec l'équipe. Aucun seuil de familiarité, règle de doublon, stratégie d'extraction ou modèle n'est imposé par ce socle.
+Les approbations acceptées par la plateforme constituent la dépense live. Les envois dont le résultat est inconnu conservent leur réservation jusqu'à réconciliation. La [session live](../packages/local-runtime/src/services/live-session-service.ts) distingue le statut du run et celui du mandat : `active`, `revocation_pending`, `revocation_unknown` ou `revoked`. `WalletRunView` projette les runs locaux et live pour l'interface : achats, évaluations, montant approuvé, réservations, audit, configuration et état du transport.
 
-## 6. Run et identifiants
+## Profils comportementaux et extractions
 
-```ts
-type RunStatus = "ready" | "running" | "waiting_human" | "completed"
-  | "cancelled" | "failed" | "interrupted";
+Les [profils](../packages/contracts/src/behavior.ts) sont isolés par `customer_id` et portée `local/live`. `BehaviorObservation` enregistre une confirmation explicite pour un filtre `C15`, `C18` ou `C19`, un contexte, un achat, un acteur, le temps simulé et le temps réel d'enregistrement. `BehaviorControlEvent` consigne `forget/suspend/resume` dans l'ordre durable du journal.
 
-type RunRecord = {
-  run_id: string;
-  scenario_id: string;
-  mode: "inspection" | "evaluation";
-  mandate_id: string;
-  mandate_version: number;
-  mandate_snapshot: AuthorizationEvent["mandate"];
-  fixture_authority_id: string;
-  customer_id: string;
-  card_id: string;
-  profile_id: string;
-  status: RunStatus;
-  next_replay_order: number;
-  total_attempts: number;
-  emitted_count: number;
-  started_at: ISODateTime;
-  finished_at: ISODateTime | null;
-  config: {
-    decision_timeout_ms: number; // défaut local : 8 000
-    human_timeout_ms: number;    // défaut local : 120 000
-    history_window_minutes: number; // contexte récent : 10
-  };
-  pack_version: string;
-  engine_version: string | null;
-  facts_version: string | null;
-};
-```
+Le [BehaviorJournal](../packages/contracts/src/behavior-dashboard.ts) conserve sa version, sa séquence, les observations, contrôles et revues `confirmed/rejected`. `BehaviorProfile` projette les habitudes avec nombres de confirmations, jours distincts, poids effectif, statut et versions des paramètres. Les tableaux de bord exposent les permissions, contrôles et métriques sans remplacer les journaux d'achat.
 
-Créer un `runKey` neuf à chaque exécution et enregistrer la correspondance avant l'émission :
+[BehaviorMLDashboard](../packages/contracts/src/behavior-ml.ts) est une projection en mode `shadow` avec `decision_influence: false`. [SimplePreferencesDashboard](../packages/contracts/src/simple-preferences.ts) utilise `beta_bernoulli_v1` avec `observation_only: true`. Les [comparaisons comportementales](../packages/contracts/src/behavior-evaluation.ts) conservent les décisions avec/sans adaptation, l'heure de prédiction, les labels et leur date de disponibilité.
 
-```text
-run_id           = LOCAL_RUN_{runKey}
-request_id       = LOCAL_REQ_{runKey}_{source_authorization_id}
-authorization_id = LOCAL_AUTH_{runKey}_{source_authorization_id}
-profile_id       = LOCAL_PROFILE_{runKey}
-mandate_id       = LOCAL_TM_{mandateKey}
-```
+L'[extraction d'offre](../packages/local-runtime/src/ai/offer-extraction.ts) utilise `OfferExtractionInput` (`offer_hash`, sources textuelles, champs demandés) et retourne des `OfferFact` avec statut `stated/missing/ambiguous/conflicting`, valeur, unité, référence et extrait exact. `validation_required: true` accompagne chaque résultat ; cette extraction n'est pas une décision de paiement.
 
-Les clés sont générées localement ; elles peuvent être injectées en tests pour rendre les snapshots reproductibles. Relivrer le même achat d'un run réutilise les mêmes IDs ; rejouer le scénario crée de nouveaux IDs. Un `request_id` basé seulement sur scénario/position serait insuffisant. `TR…`, `AU…`, `AUTH…`, `TM…` et les IDs locaux ne sont jamais interchangeables.
+## Stockage local
 
-Le socle utilise `mode="inspection"` : chaque achat est conservé avec `phase="awaiting_analysis"`, `status="pending"` et `engine_decision=null`. Aucun délai de paiement n'est activé ; le `deadline_at` canonique reste une donnée de simulation sans effet dans ce mode. Après la dernière tentative, `completed` signifie « inspection terminée », pas « achats décidés ». Les résolutions humaines de paiement sont désactivées. Le mode `evaluation` reste réservé à un évaluateur configuré et une interprétation revue ; son cycle futur est décrit ci-dessous.
+Les chemins par défaut sont définis dans [runtime.ts](../packages/local-runtime/src/runtime.ts). Le serveur accepte `LOCAL_STATE_DIR` et `LOCAL_OUTPUT_DIR` ; les données source, l'état et les sorties doivent rester dans des dossiers distincts.
 
-Un seul run non terminal à la fois dans la V1. Plusieurs achats peuvent néanmoins attendre une réponse humaine. `ready` attend le prochain clic ; `running` traite un achat ; après épuisement des tentatives, `waiting_human` attend les dernières réponses, puis `completed`. Une réponse en attente n'empêche pas l'émission suivante. `cancelled/failed/interrupted` ne signifie pas que les achats déjà approuvés sont annulés.
+| Chemin par défaut | Contenu persistant |
+| --- | --- |
+| `.local-state/policies.json` | `PolicyStoreDocument { schema_version: 1, drafts, mandates }` |
+| `.local-state/instruction-decodings.json` | `{ schema_version: 1, records }` ; clé, instruction, statut, résultat et erreur des décodages |
+| `.local-state/offer-extractions.json` | Tableau de jobs : ID, clé, entrée, statut, résultat et erreur |
+| `.local-state/simulations.sqlite` | Tables `state` (document de simulation, révision, checksum) et `commands` (clé d'idempotence, empreinte, réponse, checksum) ; inclut le journal comportemental |
+| `.local-state/wallet.sqlite` | Tables `preparations` et `human_responses` ; JSON et checksum |
+| `.local-state/live-mock/` ou `.local-state/live-remote/` | `live-sessions.sqlite` et un fichier `LIVE_SESSION_….sqlite` par outbox |
+| `output/LOCAL_RUN_…/run.json` | Snapshot d'inspection : `schema_version`, `run`, `records`, `trace_sequence`, `traces` en version 2 |
+| `output/LOCAL_RUN_…/events.jsonl` | Projection des événements d'inspection |
+| `output/LOCAL_RUN_…/trace.jsonl` | Projection des traces d'inspection |
+| `output/.writer.sqlite` | Verrou d'écriture des runs d'inspection |
+| `.local-state/api-mock/mock-api.json` | État du serveur mock : pack, brouillons, mandats, runs, autorisations, file, événements et curseur |
 
-## 7. Registre, budgets et doublons
+Les sessions live anciennes peuvent encore être chargées directement depuis `.local-state/live-sessions.sqlite`. Le CLI live autonome utilise `.viseca/live-outbox.sqlite` par défaut, modifiable via le champ `outbox` du fichier de configuration. La commande de démonstration place ses états sous `.viseca/demo/{platform,wallet,output}`. Ces racines sont ignorées par Git.
 
-```ts
-type AuthorizationStatus = "pending" | "approved" | "declined" | "cancelled";
-type CompletionReason = "engine" | "human" | "automatic_timeout"
-  | "human_timeout" | "run_cancelled" | "mandate_revoked";
+Les [politiques](../packages/local-runtime/src/storage/policy-file-store.ts) et les fichiers JSON sont enregistrés par remplacement d'un fichier temporaire. Les stores SQLite de simulation, wallet et live utilisent WAL, une synchronisation complète et des contrôles de checksum. Les commandes de simulation sont persistées dans une transaction avec leur résultat ; rejouer la même clé et un contenu différent produit un conflit.
 
-type AuthorizationRecord = {
-  run_id: string;
-  authorization_id: string;
-  source_authorization_id: string;
-  event: AuthorizationEvent;
-  facts: EvaluationFacts | null;
-  phase: "queued" | "awaiting_analysis" | "awaiting_human" | "final";
-  status: AuthorizationStatus;
-  engine_decision: DecisionResult | null;
-  human_resolution: HumanResolution | null;
-  completion_reason: CompletionReason | null;
-  human_deadline_at: ISODateTime | null;
-  finalized_at: ISODateTime | null;
-  revision: number;
-};
-
-type LocalRunState = {
-  run: RunRecord;
-  recordsById: Map<string, AuthorizationRecord>;
-  sourceToRuntimeId: Map<string, string>;
-};
-```
-
-Le registre conserve les faits complets de tous les achats émis, y compris les paniers. Aucun montant cumulé mutable n'est la seule vérité du budget.
-
-Le stockage distingue dès maintenant `pending`, `approved`, `declined` et `cancelled`, et garde les timestamps simulés. Cela permettra d'ajouter les fenêtres de budget et les analyses de répétition sans changer les données enregistrées. Les bornes des fenêtres, le périmètre exact d'un budget et le traitement métier d'une réponse tardive seront arrêtés avec l'équipe.
-
-Deux mécanismes sont distincts : la relivraison du même ID doit être idempotente dès le socle ; deux achats différents qui se ressemblent demandent une analyse métier ultérieure. Aucun seuil temporel de doublon n'est fixé maintenant. Une référence à un achat antérieur est conservée avec son résultat observé, sans en déduire une décision.
-
-Les sommes techniques n'additionnent que les décisions finales approuvées ; un `step_up` n'est pas une dépense. En inspection, aucune décision n'est produite et aucun achat n'augmente la dépense. Le compteur de période reste `null` tant que la convention de période n'est pas configurée. La vélocité fournie par le pack garde sa définition officielle, sans devenir un seuil de risque implicite.
-
-## 8. Décision, réponse humaine et audit
-
-```ts
-type Evidence = {
-  code: string;
-  field?: string;
-  observed?: unknown;
-  expected?: unknown;
-};
-
-type DecisionResult = {
-  authorization_id: string;
-  decision: Decision;
-  reason_codes: string[];
-  customer_message: string;
-  evidence: Evidence[];
-  engine_version: string;
-};
-
-type HumanResolution = {
-  resolution_id: string;
-  authorization_id: string;
-  decision: "approve" | "decline";
-  customer_message: string;
-  evidence: Evidence[];
-  resolved_at: ISODateTime;
-  origin: "local_user" | "test_script";
-};
-
-type AuditEntry = {
-  schema_version: 1;
-  sequence: number;
-  recorded_at: ISODateTime;
-  run_id: string;
-  authorization_id: string;
-  kind: "engine_decision" | "human_resolution" | "timeout" | "cancellation";
-  previous_status: AuthorizationStatus;
-  record_after: AuthorizationRecord;
-};
-```
-
-`unknown` dans les preuves signifie une valeur JSON sérialisable et bornée ; pas d'objet exécutable. Les preuves doivent permettre de retrouver la ligne, le champ ou les achats contributeurs. Codes stables possibles : `purchase_limit_exceeded`, `period_limit_exceeded`, `item_mismatch`, `missing_return_terms`, `unfamiliar_device`, `possible_duplicate`, `merchant_instruction_detected`, `policy_satisfied`.
-
-Cette section réserve les contrats des décisions futures. Leur combinaison métier sera définie avec l’équipe. Le socle valide techniquement les événements et conserve les traces ; il n’émet aucune décision de paiement lorsqu’une analyse n’est pas configurée. Les transitions ci-dessous concernent le futur mode `evaluation` et ses tests, jamais une approbation implicite en mode `inspection`.
-
-| Départ | Événement | Arrivée et effet |
-| --- | --- | --- |
-| `queued/pending` | Moteur `approve` | `final/approved`, dépense comptée une fois |
-| `queued/pending` | Moteur `decline` | `final/declined`, aucune dépense |
-| `queued/pending` | Moteur `step_up` | `awaiting_human/pending`, deadline humaine locale créée |
-| `awaiting_human/pending` | Client approuve, contrôles de commit satisfaits | `final/approved`, ajout au budget à la date simulée d'achat |
-| `awaiting_human/pending` | Client refuse | `final/declined` |
-| `pending` | Deadline dépassée | `final/declined`, raison de timeout distincte de la décision du moteur |
-| `pending` | Annulation du run ou révocation locale | `final/cancelled`, raison explicite |
-| `final` | Même commande rejouée | Retour du résultat existant, aucun nouvel effet |
-| `final` | Réponse contradictoire | Conflit, résultat final conservé |
-
-Pas de deuxième décision automatisée après `step_up`. La résolution est un événement distinct. L'application fixe `origin` : le navigateur ne peut pas prétendre qu'un script constitue une confirmation humaine. Les tests scriptés portent cette mention dans le rapport.
-
-En mode `evaluation`, les deadlines de 8 s et 120 s sont des valeurs locales configurables inspirées des valeurs par défaut documentées, pas des réglages interrogés sur Viseca. Les timeouts utilisent une horloge injectée ; un test ne dort pas réellement 120 secondes.
-
-## 9. Écriture, concurrence et fichiers
-
-```text
-.local-state/                    # ignoré par Git
-  policies.json                  # brouillons, mandats, versions, confirmations
-output/{run_id}/                 # ignoré par Git
-  run.json                       # identité, snapshot, configuration, versions
-  events.jsonl                   # événements canoniques reçus, immuables
-  decisions.jsonl                # AuditEntry : transitions effectivement acceptées
-  summary.json                   # compteurs et état terminal, régénérables
-```
-
-`policies.json` est écrit par remplacement atomique d'un fichier temporaire. Une seule instance locale écrit dans ces répertoires ; CLI et serveur ne s'exécutent pas simultanément sur le même stockage. Une file de commandes sérialise émission, décision, résolution, timeout et révocation. Écrire la transition avant de publier son nouvel état en mémoire et de répondre au client. Si l'écriture échoue, aucune approbation réussie n'est annoncée.
-
-Chaque achat finalisé a un seul résultat final. Les compteurs du résumé sont dérivés du registre, pas incrémentés indépendamment. Une relivraison ne crée pas une nouvelle ligne de dépense. Les commandes HTTP mutables sont dédupliquées par clé d'idempotence, méthode, chemin et empreinte du corps pendant la session serveur ; même clé et contenu différent → conflit.
-
-Au redémarrage, les mandats sont rechargés et les runs terminés sont consultables depuis leurs artefacts. Un run sans état terminal devient `interrupted`, en lecture seule. Aucun achat en attente n'est approuvé ni réémis automatiquement. La reprise durable d'un run actif n'est pas une fonctionnalité V1 ; les clés de commande d'une ancienne session ne sont pas rejouées automatiquement par le navigateur.
-
-Une révocation met à jour le mandat courant et annule localement les achats encore en attente du run concerné ; le snapshot d'origine et les approbations passées restent conservés. Cette sémantique est celle de notre simulateur local, pas une promesse sur les achats en attente de l'API Viseca.
-
-Les `Map` sont des index mémoire, jamais sérialisés directement avec `JSON.stringify`. Les fichiers stockent des tableaux/objets explicites, les montants applicatifs sous forme de chaînes décimales et les événements canoniques avec leurs nombres JSON. `policies.json` porte un `schema_version`, un tableau `drafts` et un tableau `mandates` ; le chargement valide cette structure avant de reconstruire les index. Le cache de commandes idempotentes appartient à la session serveur et n'est pas une nouvelle source de dépenses.
+Le [snapshot d'inspection](../packages/local-runtime/src/storage/run-file-store.ts) est la source de vérité ; ses fichiers JSONL sont reconstruits au chargement. Un run d'inspection non terminal devient `interrupted` au redémarrage. Les simulations restent dans SQLite ; les sessions live sont restaurées avec leurs snapshots et réconciliées avec la plateforme. Les décodages et extractions interrompus sont marqués `interrupted` et nécessitent une nouvelle action explicite.

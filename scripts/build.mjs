@@ -27,6 +27,7 @@ await build({
 await cp("apps/local-web/web/index.html", "dist/apps/local-web/web/index.html");
 await cp("apps/local-web/web/styles.css", "dist/apps/local-web/web/styles.css");
 await cp("apps/local-web/web/behavior-profiles.css", "dist/apps/local-web/web/behavior-profiles.css");
+await cp("apps/local-web/web/filter-documentation.css", "dist/apps/local-web/web/filter-documentation.css");
 await cp("assets", "dist/apps/local-web/web/assets", { recursive: true });
 
 console.log("Build complete: dist/");

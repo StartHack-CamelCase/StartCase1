@@ -8,7 +8,7 @@ import type { SafetyConfig } from "../../../contracts/src/simulation.js";
 import type { HardRule } from "../../../contracts/src/policy.js";
 import type { AuthorizationEvent } from "../../../contracts/src/event.js";
 import { VisecaClient, VisecaHttpError } from "../simulation/viseca-client.js";
-import { evaluateLive, validateLiveBinding, type LiveBinding } from "../simulation/live-engine.js";
+import { evaluateLive, validateLiveBinding, validatePersistedLiveBinding, type LiveBinding } from "../simulation/live-engine.js";
 import { hash } from "../simulation/common.js";
 import { SerialExecutor } from "./serial-executor.js";
 import { VisecaOutbox, VisecaWorker, type LiveEntry, type TrustedHuman, type HumanAuthorizer, type Evaluation } from "../simulation/viseca-worker.js";
@@ -18,7 +18,7 @@ export type LiveMandateStatus = 'active'|'revocation_pending'|'revocation_unknow
 export type LiveSessionView = { session_id: string; mandate_id: string; run_id: string; status: string; mandate_status:LiveMandateStatus; last_poll_status: 204 | 200 | null; last_error:string|null; entries: LiveEntry[] };
 export type LiveStartView = { key:string; session_id:string; scenario_id:string; stage:string; status:string; draft_id:string; mandate_id:string; run_id:string; retryable:boolean; last_error:string|null };
 type SavedSession = { key:string; fingerprint:string; stage:string; rejected_stage?:string; session_id:string; draft_id?:string; mandate_id:string; mandate_status?:LiveMandateStatus; run_id:string; binding:LiveBinding; human_window_ms:number; status:string; last_poll_status:204|200|null; last_error?:string|null };
-type Session = { saved:SavedSession; outbox:VisecaOutbox; worker:VisecaWorker; stop:boolean; recovering:boolean; loop?:Promise<void>; reconciliation?:Promise<void>; revocation?:Promise<void>; remoteTerminal?:string };
+type Session = { saved:SavedSession; outbox:VisecaOutbox; worker:VisecaWorker; stop:boolean; recovering:boolean; historical?:boolean; loop?:Promise<void>; reconciliation?:Promise<void>; revocation?:Promise<void>; remoteTerminal?:string };
 export type LiveSessionOptions = { baseUrl?: string; apiKey?: string; transport?: (path: string, init?: RequestInit) => Promise<Response>; stateDir: string; behaviorJournal?:(entries:LiveEntry[])=>BehaviorJournal };
 const terminal = (status:string) => ['completed','cancelled','failed'].includes(status);
 
@@ -156,6 +156,7 @@ export class LiveSessionService {
   private ids(saved:SavedSession){return {session_id:saved.session_id,mandate_id:saved.mandate_id,run_id:saved.run_id};}
   private assertSubmissionAllowed(saved:SavedSession,decision:'approve'|'decline'|'step_up'):void{
     if(this.closed)throw Error('live_service_closed');
+    if(this.sessions.get(saved.session_id)?.historical)throw Error('live_history_read_only');
     if(decision!=='approve')return;
     const session=this.sessions.get(saved.session_id);
     if(terminal(saved.status)||['queue_conflict','authentication_required','reconciliation_required'].includes(saved.status)||session?.stop||session?.recovering)throw Error('live_approval_suspended');
@@ -166,11 +167,17 @@ export class LiveSessionService {
   }
   private async attach(saved:SavedSession,restored=false):Promise<void>{
     if(this.sessions.has(saved.session_id))return;
-    validateLiveBinding(saved.binding,this.pack);
+    const historical=restored&&terminal(saved.status);
+    if(historical)validatePersistedLiveBinding(saved.binding,this.pack);else validateLiveBinding(saved.binding,this.pack);
     const outbox=new VisecaOutbox(join(this.options.stateDir,`${saved.session_id}.sqlite`));
     try{
-      await outbox.load();const worker=this.worker(saved,outbox);await worker.startRun(saved.run_id,saved.binding,saved.human_window_ms);
-      const session:Session={saved,outbox,worker,stop:this.closed,recovering:restored};this.sessions.set(saved.session_id,session);
+      const stored=await outbox.load();const worker=this.worker(saved,outbox);
+      if(historical){
+        // Display final history as recorded. startRun performs recovery writes
+        // appropriate only for an executable session, not historical consent.
+        if(stored.run_id!==saved.run_id||hash(stored.snapshot)!==hash(saved.binding)||stored.human_window_ms!==saved.human_window_ms)throw Error('immutable_live_snapshot_conflict');
+      }else await worker.startRun(saved.run_id,saved.binding,saved.human_window_ms);
+      const session:Session={saved,outbox,worker,stop:this.closed,recovering:restored,historical};this.sessions.set(saved.session_id,session);
       if(!this.closed&&this.configured()&&!terminal(saved.status))this.launch(session,restored);
     }catch(error){outbox.close();throw error;}
   }

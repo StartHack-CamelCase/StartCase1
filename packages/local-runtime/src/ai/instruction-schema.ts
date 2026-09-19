@@ -4,12 +4,12 @@ import { Decimal } from "decimal.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsImport from "ajv-formats";
 import { AppError, type InstructionDecoding, type InstructionVariables } from "../../../contracts/src/index.js";
-import { normalizeOrderAmountBound, parseOrderAmountBounds } from "../simulation/config.js";
+import { findExplicitMonetaryConstraints, findMentionedMonetaryAmounts, normalizeOrderAmountBound } from "../simulation/config.js";
 
 type Schema = Record<string, unknown>;
 export type InstructionField = { field: string; schema: Schema; instruction_eligible: boolean };
-export const INSTRUCTION_PROMPT_VERSION = "instruction-variables-v11";
-export const INSTRUCTION_VALIDATION_VERSION = "instruction-validation-v5";
+export const INSTRUCTION_PROMPT_VERSION = "instruction-variables-v14";
+export const INSTRUCTION_VALIDATION_VERSION = "instruction-validation-v8";
 
 // These are assigned by the pack/runtime, not instruction constraints. In particular,
 // a single requested product does not provide a source basket line number or ID.
@@ -64,7 +64,9 @@ const validateVariables = ajv.compile<InstructionVariables>(instructionVariables
 
 // The model returns a sparse list; the runtime validates and reconstructs absent fields.
 export function instructionModelSchema(fields: InstructionField[], instruction: string): Schema {
- const excerpts=[...new Set([instruction,...instruction.split(/(?<=[.,;!?])\s+/).filter(part=>part.trim()!=="")])];
+ // Structured-output enum literals cannot contain control characters such as
+ // newlines. Keep the input verbatim, but offer exact single-line excerpts.
+ const excerpts=[...new Set([instruction,...instruction.split(/[\u0000-\u001f]+|(?<=[.,;!?])\s+/)].filter(part=>part.trim()!==""&&!/[\u0000-\u001f]/.test(part)))];
  return {type:"object",additionalProperties:false,required:["variables","unmapped_requirements"],properties:{
   variables:{type:"array",minItems:0,maxItems:fields.length,items:{type:"object",additionalProperties:false,required:Object.keys(variableProperties),properties:{...variableProperties,field:{type:"string",enum:fields.map(f=>f.field)},source_excerpt:{type:["string","null"],enum:[...excerpts,null]}}}},
   unmapped_requirements:{...instructionVariablesSchema.properties.unmapped_requirements,items:{...instructionVariablesSchema.properties.unmapped_requirements.items,properties:{...instructionVariablesSchema.properties.unmapped_requirements.items.properties,source_excerpt:{type:"string",enum:excerpts}}}}
@@ -85,10 +87,37 @@ export function parseInstructionModelOutput(value: unknown, instruction: string,
   const validate = ajv.compile(instructionModelSchema(fields, instruction));
   if (!validate(value)) throw new AppError(502, "instruction_decoding_invalid", "The decoding does not match the expected field inventory.");
   const output = value as { variables: Array<InstructionVariables["variables"][number]>; unmapped_requirements: InstructionVariables["unmapped_requirements"] };
-  const entries = new Map(output.variables.map(v=>[v.field,v]));
-  if(entries.size!==output.variables.length)throw new AppError(502,"instruction_decoding_invalid","A decoded field appears more than once.");
+  const entries = new Map<string, InstructionVariables['variables'][number]>();
+  const unmapped = structuredClone(output.unmapped_requirements);
+  const monetaryBounds: Array<NonNullable<ReturnType<typeof normalizeOrderAmountBound>>> = [];
+  for (const variable of output.variables) {
+    const previous = entries.get(variable.field);
+    if (!previous) { entries.set(variable.field, variable); continue; }
+    // A range needs two comparisons, while the canonical inventory allows one
+    // variable per field. Preserve a supported additional boundary instead of
+    // throwing away the entire decoding. Other duplicates remain invalid.
+    const comparisons = [previous, variable];
+    if (!comparisons.every(item => item.field === 'authorization.billing_amount_chf'
+      && item.scope === 'purchase' && item.period_days === null && (item.currency === 'CHF' || item.currency === null)
+      && hasSupportedMonetaryConstraint(item, instruction))) {
+      throw new AppError(502, 'instruction_decoding_invalid', 'A decoded field appears more than once.');
+    }
+    if (monetaryBounds.length === 0) monetaryBounds.push(normalizeOrderAmountBound(String(previous.value), previous.operator!)!);
+    const boundary = normalizeOrderAmountBound(String(variable.value), variable.operator!)!;
+    if (monetaryBounds.some(existing => existing.min_order_chf === boundary.min_order_chf && existing.max_order_chf === boundary.max_order_chf)) {
+      throw new AppError(502, 'instruction_decoding_invalid', 'A decoded field repeats the same amount comparison.');
+    }
+    monetaryBounds.push(boundary);
+    const lower = monetaryBounds.flatMap(bound => bound.min_order_chf === null ? [] : [bound.min_order_chf]);
+    const upper = monetaryBounds.flatMap(bound => bound.max_order_chf === null ? [] : [bound.max_order_chf]);
+    if (lower.length > 0 && upper.length > 0 && Decimal.max(...lower).gt(Decimal.min(...upper))) {
+      throw new AppError(502, 'instruction_decoding_invalid', 'The decoded amount comparisons define a contradictory range.');
+    }
+    const requirement = { source_excerpt: variable.source_excerpt!, description: `Purchase amount ${variable.operator} CHF ${variable.value}`, reason: 'no_native_field' as const };
+    if (!unmapped.some(existing => existing.description === requirement.description && existing.source_excerpt === requirement.source_excerpt)) unmapped.push(requirement);
+  }
   const complete=fields.map(({field})=>entries.get(field)??{field,status:"absent" as const,value:null,operator:null,currency:null,scope:null,period_days:null,source_excerpt:null,note:null});
-  return validateInstructionFields({ variables: complete, unmapped_requirements: output.unmapped_requirements }, instruction, fields);
+  return validateInstructionFields({ variables: complete, unmapped_requirements: unmapped }, instruction, fields);
 }
 
 export function parseInstructionVariables(value: unknown, instruction: string): InstructionVariables {
@@ -184,7 +213,7 @@ export function validateInstructionFields(value: unknown, instruction: string, f
     }
     if (variable.currency !== null && !/amount|spend|price|cost|plafond|ceiling|limit/i.test(descriptor.field)) throw new AppError(502, "instruction_decoding_invalid", "Currency can only be attached to a monetary field.", { field: descriptor.field });
     if(descriptor.field==='authorization.billing_amount_chf'&&variable.currency!==null&&variable.currency!=='CHF')throw new AppError(502,'instruction_decoding_invalid','The CHF billing constraint must remain expressed in CHF.');
-    if(descriptor.field==='authorization.billing_amount_chf'&&variable.scope!=='period')assertOrderAmountComparison(variable,instruction);
+    if (MONETARY_CONSTRAINT_FIELDS.has(descriptor.field)) validateMonetaryConstraint(variable, instruction);
     if(descriptor.field==='authorization.currency'&&!values.every(currency=>new RegExp(`(?:\\b(?:in|en)\\s+${currency}\\b|\\b${currency}\\s+(?:only|uniquement|exclusivement)\\b|\\b(?:currency|devise)\\s*(?:(?:is|est|:)\\s*)?${currency}\\b)`,'i').test(variable.source_excerpt??'')))throw new AppError(502,'instruction_decoding_invalid','A currency restriction must be explicitly requested; a CHF ceiling is insufficient.');
 
   }
@@ -192,22 +221,52 @@ export function validateInstructionFields(value: unknown, instruction: string, f
   return decoded;
 }
 
-/** A literal amount comparison must survive model transcription unchanged.
- * Ranges may use one canonical variable; preparation combines both source bounds.
- * Compare in cents, the same precision used by the payment permission compiler. */
-function assertOrderAmountComparison(variable: InstructionVariables["variables"][number], instruction: string): void {
+const MONETARY_CONSTRAINT_FIELDS = new Set([
+  "authorization.billing_amount_chf", "authorization.amount", "context.approved_spend_in_period_chf",
+]);
+
+function monetaryEvidence(variable: InstructionVariables["variables"][number], instruction: string) {
+  const excerpt = variable.source_excerpt;
+  if (!excerpt || !instruction.includes(excerpt)) return [];
+  // Parse the original clauses first. Parsing a shortened model excerpt could
+  // hide "when the merchant is unfamiliar" and turn its threshold into a cap.
+  return findExplicitMonetaryConstraints(instruction).filter(evidence =>
+    excerpt.includes(evidence.source_excerpt) || evidence.source_excerpt.includes(excerpt));
+}
+
+function sameAmountComparison(value: number, operator: string | null, evidence: ReturnType<typeof monetaryEvidence>[number]): boolean {
+  const decoded = normalizeOrderAmountBound(String(value), operator ?? "");
+  const source = normalizeOrderAmountBound(evidence.value, evidence.operator);
+  return decoded !== null && source !== null
+    && decoded.min_order_chf === source.min_order_chf && decoded.max_order_chf === source.max_order_chf;
+}
+
+/** Re-check source evidence when compiling persisted or externally supplied
+ * decodings as well as newly received model output. Non-monetary fields pass. */
+export function hasSupportedMonetaryConstraint(variable: InstructionVariables["variables"][number], instruction: string): boolean {
+  if (!MONETARY_CONSTRAINT_FIELDS.has(variable.field)) return true;
+  if (variable.status !== "present" || typeof variable.value !== "number") return false;
+  const period = variable.field === "context.approved_spend_in_period_chf" || variable.scope === "period";
+  return monetaryEvidence(variable, instruction).some(evidence =>
+    evidence.scope === (period ? "period" : "purchase")
+    && (!period || evidence.period_days === variable.period_days)
+    && sameAmountComparison(variable.value as number, variable.operator, evidence));
+}
+
+/** Comparators require source evidence. Unsupported purchase facts are kept
+ * ambiguous; explicit comparisons still cannot be inverted by the model. */
+function validateMonetaryConstraint(variable: InstructionVariables["variables"][number], instruction: string): void {
   if (variable.status !== "present" || typeof variable.value !== "number") return;
-  const excerpt = parseOrderAmountBounds(variable.source_excerpt ?? instruction);
-  const source = excerpt.min_order_chf !== null || excerpt.max_order_chf !== null ? excerpt : parseOrderAmountBounds(instruction);
-  if (source.min_order_chf === null && source.max_order_chf === null) return;
-  const normalized = normalizeOrderAmountBound(String(variable.value), variable.operator ?? "");
-  const minimum = normalized?.min_order_chf ?? null;
-  const maximum = normalized?.max_order_chf ?? null;
-  const exact = source.min_order_chf !== null && source.max_order_chf !== null && new Decimal(source.min_order_chf).eq(source.max_order_chf);
-  if ((minimum === null && maximum === null)
-    || (exact && variable.operator !== "=")
-    || (minimum !== null && (source.min_order_chf === null || !new Decimal(minimum).eq(source.min_order_chf)))
-    || (maximum !== null && (source.max_order_chf === null || !new Decimal(maximum).eq(source.max_order_chf)))) {
+  if (hasSupportedMonetaryConstraint(variable, instruction)) return;
+  const evidence = monetaryEvidence(variable, instruction);
+  const amountIsExplicit = evidence.some(item => new Decimal(item.value).eq(variable.value as number));
+  const amountAppears = findMentionedMonetaryAmounts(instruction)
+    .some(amount => new Decimal(amount).eq(variable.value as number));
+  if (amountIsExplicit || evidence.length > 0 && !amountAppears) {
     throw new AppError(502, "instruction_decoding_invalid", "The decoded amount comparison does not match the instruction.", { field: variable.field });
   }
+  Object.assign(variable, {
+    status: "ambiguous", value: null, operator: null, currency: "CHF", scope: null, period_days: null,
+    note: "The original instruction does not establish this amount as an unconditional spending constraint. Clarify whether it is a maximum, minimum, exact amount, approximate target, or transaction description; preserve any historical or conditional context.",
+  });
 }

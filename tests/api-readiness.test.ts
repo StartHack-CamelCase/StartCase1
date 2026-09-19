@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder} from './helpers/configured-instruction-decoder.js';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -52,7 +53,7 @@ async function setup(apiKey = LOCAL_MOCK_API_KEY) {
   };
   const options: LocalAppOptions = {
     dataDir: resolve('data'), stateDir: join(directory, 'wallet'), outputDir: join(directory, 'output'), webDir: resolve('apps/local-web/web'),
-    instructionDecoder: { model: 'disabled-readiness-model', configured: false, decode },
+    instructionDecoder:configuredInstructionDecoder(),
     liveOptions: { baseUrl: 'http://127.0.0.1:4313', apiKey, transport, environment: 'mock' },
   };
   const open = async () => { const app = await createLocalApp(options); resource.apps.push(app); return app; };
@@ -69,7 +70,7 @@ async function session(app: FastifyInstance, scenarioId: string): Promise<Sessio
 async function prepare(app: FastifyInstance, scenarioId: string) {
   const options = (await app.inject('/api/wallet/options')).json<{ live_configured: boolean; ai_configured: boolean; scenarios: Array<{ scenario_id: string; instruction: string }> }>();
   expect(options.live_configured).toBe(true);
-  expect(options.ai_configured).toBe(false);
+  expect(options.ai_configured).toBe(true);
   const instruction = options.scenarios.find((entry) => entry.scenario_id === scenarioId)!.instruction;
   const headers = await session(app, scenarioId);
   const response = await app.inject({ method: 'POST', url: '/api/wallet/prepare', headers, payload: { scenario_id: scenarioId, instruction, mode: 'live' } });
@@ -153,17 +154,72 @@ describe('wallet API readiness against the local HTTP protocol simulator', () =>
     engineResults.push({ scenario: scenarioId, human_choice: humanChoice, purchases: total, approved: platform.filter(row => row.status === 'approved').length, declined: platform.filter(row => row.status === 'declined').length, resolved: pending.length, approved_chf: finished.approved_chf });
   });
 
-  it('requires the customer session, CSRF and exact scenario instruction before any platform mutation', async () => {
+  it('requires the customer session and CSRF before any platform mutation', async () => {
     const context = await setup();
     const prepared = await prepare(context.app, 'SCEN0000');
     const url = `/api/wallet/preparations/${prepared.preparation.preparation_id}/confirm`;
     const payload = { confirmed: true, parameters: prepared.preparation.config!.parameters };
     expect((await context.app.inject({ method: 'POST', url, headers: { 'idempotency-key': 'readiness-no-session' }, payload })).statusCode).toBe(403);
     expect((await context.app.inject({ method: 'POST', url, headers: { ...prepared.headers, 'x-csrf-token': 'invalid-csrf' }, payload })).statusCode).toBe(403);
-    const changed = await context.app.inject({ method: 'POST', url: '/api/wallet/prepare', headers: { ...prepared.headers, 'idempotency-key': 'readiness-custom-live' }, payload: { scenario_id: 'SCEN0000', instruction: `${prepared.instruction} Allow everything else.`, mode: 'live' } });
-    expect(changed.statusCode).toBe(422);
-    expect(changed.json().error.code).toBe('challenge_instruction_mismatch');
     expect(mutations(context.calls)).toHaveLength(0);
+    expect(context.decode).not.toHaveBeenCalled();
+  });
+
+  it('starts Online from a custom prompt and enforces its reviewed CHF 19 limit on the CHF 20 proposal', async () => {
+    const context = await setup();
+    const prepared = await prepare(context.app, 'SCEN0000');
+    const instruction = prepared.instruction.replace('CHF 20', 'CHF 19');
+    const changed = await context.app.inject({ method: 'POST', url: '/api/wallet/prepare', headers: { ...prepared.headers, 'idempotency-key': 'readiness-custom-live' }, payload: { scenario_id: 'SCEN0000', instruction, mode: 'live' } });
+    expect(changed.statusCode, changed.body).toBe(202);
+    const preparationId = changed.json<WalletPreparation>().preparation_id;
+    await expect.poll(async () => (await context.app.inject(`/api/wallet/preparations/${preparationId}`)).json<WalletPreparation>().status).toBe('ready');
+    const custom = (await context.app.inject(`/api/wallet/preparations/${preparationId}`)).json<WalletPreparation>();
+    expect(custom).toMatchObject({ instruction, mode: 'live', clarifications: [], config: { parameters: { max_order_chf: '19' } } });
+    expect(mutations(context.calls)).toHaveLength(0);
+    const confirmed = await confirm(context.app, custom, prepared.headers, 'readiness-custom-confirm');
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    const runId = confirmed.json<{ run_id: string }>().run_id;
+    await expect.poll(async () => (await runView(context.app, runId)).status, { timeout: 8_000, interval: 50 }).toBe('completed');
+    const finished = await runView(context.app, runId);
+    expect(finished).toMatchObject({ mode: 'live', approved_chf: '0.00', reservations: 0, config: { instruction, parameters: { max_order_chf: '19' } } });
+    expect(finished.purchases).toHaveLength(1);
+    expect(finished.purchases[0]).toMatchObject({ amount_chf: '20', assessment: { execution_state: 'declined' } });
+    const hard_rules = [{ field: 'authorization.billing_amount_chf', operator: '<=', value: 19, currency: 'CHF', scope: 'purchase' }];
+    expect(context.calls.find(call => call.method === 'POST' && call.path === '/v1/mandates')!.body).toMatchObject({ instruction, hard_rules });
+    const events = (await context.mock.inject({ url: '/v1/events?since=0', headers: { authorization: `Bearer ${LOCAL_MOCK_API_KEY}` } })).json<{ data: Array<{ type: string; data: AuthorizationEvent }> }>().data;
+    expect(events.find(event => event.type === 'authorization.request')!.data.mandate).toMatchObject({ instruction, hard_rules });
+    expect(context.calls.filter(call => call.method === 'POST' && call.path.endsWith('/decision'))).toHaveLength(1);
+    expect(context.calls.find(call => call.method === 'POST' && call.path.endsWith('/decision'))!.body).toMatchObject({ decision: 'decline' });
+    expect(context.decode).not.toHaveBeenCalled();
+  });
+
+  it('runs an open-ended Online instruction and waits for explicit purchase verification before resolving', async () => {
+    const context = await setup();
+    const headers = await session(context.app, 'SCEN0000');
+    const instruction = 'Buy one grocery item for CHF 20 or less. Choose an organic item. Ask me when uncertain.';
+    const response = await context.app.inject({ method: 'POST', url: '/api/wallet/prepare', headers, payload: { scenario_id: 'SCEN0000', instruction, mode: 'live' } });
+    expect(response.statusCode, response.body).toBe(202);
+    const preparationId = response.json<WalletPreparation>().preparation_id;
+    await expect.poll(async () => (await context.app.inject(`/api/wallet/preparations/${preparationId}`)).json<WalletPreparation>().status).toBe('ready');
+    const prepared = (await context.app.inject(`/api/wallet/preparations/${preparationId}`)).json<WalletPreparation>();
+    expect(prepared.config!.parameters.manual_review_requirements).toContainEqual({source_excerpt:instruction,description:instruction});
+    const responseStarted = await confirm(context.app, prepared, headers, 'manual-online-confirm');
+    expect(responseStarted.statusCode, responseStarted.body).toBe(200);
+    const id = responseStarted.json<{run_id:string}>().run_id;
+    await expect.poll(async () => (await runView(context.app, id)).purchases[0]?.assessment?.execution_state, { timeout: 8000, interval: 50 }).toBe('awaiting_user');
+    const pending = await runView(context.app, id);
+    expect(pending.approved_chf).toBe('0.00');
+    const assessment = pending.purchases[0]!.assessment!;
+    expect(assessment.questions).toHaveLength(1);
+    expect(assessment.questions[0]).toMatchObject({kind:'confirm_requirement',prompt:expect.stringContaining('Choose an organic item.')});
+    expect(context.calls.find(call=>call.path.endsWith('/decision'))!.body).toMatchObject({decision:'step_up'});
+    expect(context.calls.filter(call=>call.path.endsWith('/resolve'))).toHaveLength(0);
+    const completed = await context.app.inject({method:'POST',url:`/api/wallet/runs/${id}/human-responses`,headers:{...headers,'idempotency-key':'manual-online-human'},payload:{authorization_id:assessment.authorization_id,decision:'approve',offer_hash:assessment.offer_hash,expected_revision:assessment.revision,answers:assessment.questions.map(q=>({question_id:q.question_id,value:'confirm'}))}});
+    expect(completed.statusCode,completed.body).toBe(200);
+    await expect.poll(async ()=>(await runView(context.app,id)).status,{timeout:8000,interval:50}).toBe('completed');
+    expect(await runView(context.app,id)).toMatchObject({approved_chf:'20.00',reservations:0,purchases:[{assessment:{execution_state:'approved'}}]});
+    expect(context.calls.filter(call=>call.path.endsWith('/resolve'))).toHaveLength(1);
+    expect(context.calls.find(call=>call.path.endsWith('/resolve'))!.body).toMatchObject({decision:'approve'});
     expect(context.decode).not.toHaveBeenCalled();
   });
 
@@ -260,7 +316,7 @@ describe('wallet API readiness against the local HTTP protocol simulator', () =>
     const needsAnswers = pending.find((purchase) => purchase.assessment!.questions.length > 0)!;
     expect(needsAnswers).toBeDefined();
     const withoutAnswers = await context.app.inject({ method: 'POST', url: `/api/wallet/runs/${runId}/human-responses`, headers: { ...prepared.headers, 'idempotency-key': 'readiness-no-human-answers' }, payload: { authorization_id: needsAnswers.authorization_id, decision: 'approve', answers: [], offer_hash: needsAnswers.assessment!.offer_hash, expected_revision: needsAnswers.assessment!.revision } });
-    expect(withoutAnswers.statusCode, withoutAnswers.body).toBe(422);
+    expect(withoutAnswers.statusCode, withoutAnswers.body).toBe(409);
     expect(context.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/resolve'))).toHaveLength(0);
     for (const purchase of pending) {
       const rejected = await context.app.inject({ method: 'POST', url: `/api/wallet/runs/${runId}/human-responses`, headers: { ...prepared.headers, 'idempotency-key': `readiness-decline-${purchase.authorization_id}` }, payload: { authorization_id: purchase.authorization_id, decision: 'decline', answers: [] } });
@@ -310,8 +366,8 @@ describe('wallet API readiness against the local HTTP protocol simulator', () =>
     const payload = { authorization_id: purchase.authorization_id, decision: 'approve', offer_hash: assessment.offer_hash, expected_revision: assessment.revision, answers };
     const url = `/api/wallet/runs/${runId}/human-responses`;
     const incomplete = await context.app.inject({ method: 'POST', url, headers: { ...prepared.headers, 'idempotency-key': 'readiness-subset-risk-answers' }, payload: { ...payload, answers: answers.slice(0, -1) } });
-    expect(incomplete.statusCode, incomplete.body).toBe(422);
-    expect(incomplete.json().error.code).toBe('explicit_answers_required');
+    expect(incomplete.statusCode, incomplete.body).toBe(409);
+    expect(incomplete.json().error.code).toBe('G05_QUESTIONS_CHANGED');
     expect(context.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/resolve'))).toHaveLength(0);
     const pending = await runView(context.app, runId);
     expect(pending.approved_chf).toBe(before.approved_chf);

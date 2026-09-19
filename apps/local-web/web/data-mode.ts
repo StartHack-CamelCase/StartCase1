@@ -21,6 +21,7 @@ export function modePath(path: string, mode: DataMode): string {
   return url.pathname + url.search + url.hash;
 }
 export function modeLanding(pathname: string, search: string): string {
+  if (pathname === '/documentation/filters') return pathname;
   if (pathname === '/wallet/profiles' || pathname === '/wallet/new') {
     const query = new URLSearchParams(search); query.delete('scope'); query.delete('mode');
     return pathname + (query.size ? `?${query}` : '');

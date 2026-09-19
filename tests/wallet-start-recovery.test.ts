@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -12,7 +13,7 @@ async function setup(fault:'reject'|'lost-run'){
  const dir=await mkdtemp(join(tmpdir(),'wallet-start-recovery-'));
  const mock=await createMockApi({stateDir:join(dir,'platform')});
  const r={dir,mock,apps:[] as FastifyInstance[]};resources.push(r);let fail=true;let runPosts=0;
- const options:LocalAppOptions={stateDir:join(dir,'wallet'),outputDir:join(dir,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:{configured:false,model:'disabled',decode:async()=>{throw Error('No API');}},liveOptions:{environment:'mock',baseUrl:'http://127.0.0.1:4313',apiKey:LOCAL_MOCK_API_KEY,transport:async(path,init)=>{
+ const options:LocalAppOptions={stateDir:join(dir,'wallet'),outputDir:join(dir,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:configuredInstructionDecoder(),liveOptions:{environment:'mock',baseUrl:'http://127.0.0.1:4313',apiKey:LOCAL_MOCK_API_KEY,transport:async(path,init)=>{
   if(fail&&fault==='reject'&&path==='/v1/mandates'&&init?.method==='POST'){fail=false;return new Response(JSON.stringify({error:{code:'invalid_instruction'}}),{status:400});}
   if(path==='/v1/scenario-runs'&&init?.method==='POST')runPosts++;
   const response=await mock.inject({url:path,method:(init?.method??'GET') as 'GET'|'POST'|'DELETE',headers:Object.fromEntries(new Headers(init?.headers)),...(init?.signal?{signal:init.signal}:{}),...(init?.body?{payload:String(init.body)}:{})});
@@ -24,7 +25,8 @@ async function setup(fault:'reject'|'lost-run'){
  const instruction=(await app.inject('/api/wallet/options')).json().scenarios.find((s:{scenario_id:string})=>s.scenario_id==='SCEN0000').instruction;
  const prepared=await app.inject({method:'POST',url:'/api/wallet/prepare',headers,payload:{scenario_id:'SCEN0000',mode:'live',instruction}});
  const id=prepared.json().preparation_id;
- const confirm={method:'POST' as const,url:`/api/wallet/preparations/${id}/confirm`,headers,payload:{confirmed:true,parameters:prepared.json().config.parameters,mode:'live'}};
+ const prep=await readyWalletPreparation(async()=>(await app.inject(`/api/wallet/preparations/${id}`)).json());
+ const confirm={method:'POST' as const,url:`/api/wallet/preparations/${id}/confirm`,headers,payload:{confirmed:true,parameters:prep.config!.parameters,mode:'live'}};
  const response=await app.inject(confirm);expect(response.statusCode).toBeGreaterThanOrEqual(400);
  return {app,r,open,id,headers,confirm,runPosts:()=>runPosts};
 }

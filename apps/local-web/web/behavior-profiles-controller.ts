@@ -124,7 +124,7 @@ export class BehaviorProfilesController {
     this.publish();
     if (this.state.recovery || this.state.recoveryInvalid) return;
     const review = this.state.dashboard.reviews?.[index];
-    if (!review || review.verdict !== null) return;
+    if (!review || review.verdict === verdict) return;
     await this.perform(FEEDBACK_PATH, { scenario_id: this.state.scenarioId, scope: this.state.scope, authorization_id: review.authorization_id, filter_id: review.filter_id, verdict, expected_revision: this.state.dashboard.revision });
   }
 

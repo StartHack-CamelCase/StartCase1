@@ -4,7 +4,35 @@ import {preparePermissions,applyParameters,hardRulesFromParameters} from '../pac
 import type {InstructionDecoding} from '../packages/contracts/src/instruction-decoding.js';
 import type {WalletPreparation} from '../packages/contracts/src/wallet.js';
 const decoding=(field:string,value:string):InstructionDecoding=>({variables:[{field,status:'present',value,operator:'=',currency:null,scope:null,period_days:null,source_excerpt:'Buy only from Merchant X.',note:null}],unmapped_requirements:[],decoding_id:'test',instruction:'Buy only from Merchant X.',schema_version:1,prompt_version:'test',source_schema_hash:'test',model_requested:'test',model_returned:'test',response_id:'test',created_at:'2026-09-19T00:00:00Z',duration_ms:0,usage:{input_tokens:0,output_tokens:0,reasoning_tokens:0}});
-it('does not silently discard an unsupported explicit merchant-name restriction',()=>{const ctx=fixture();const reviewed=preparePermissions(ctx.pack,'Buy only from Merchant X.',decoding('authorization.merchant.merchant_name','Merchant X'),ctx.now);expect(reviewed.clarifications.some(c=>c.key==='unresolved:authorization.merchant.merchant_name')).toBe(true);expect(reviewed.clarifications[0]?.diagnostic).toEqual({field:'authorization.merchant.merchant_name',decoded_value:'Merchant X',source_excerpt:'Buy only from Merchant X.',reason:'This decoded field and value have no executable permission mapping.'});try{applyParameters(reviewed as WalletPreparation,reviewed.config!.parameters,ctx.pack);throw new Error('Expected unsupported constraint to block start');}catch(error){expect(error).toMatchObject({message:'Cannot start: Unsupported decoded constraint: authorization.merchant.merchant_name = "Merchant X".',details:{unresolved:[reviewed.clarifications[0]!.diagnostic]}});}});
+it('preserves an unsupported merchant-name restriction as a required purchase review',()=>{
+ const ctx=fixture(),instruction='Buy only from Merchant X.';
+ const reviewed=preparePermissions(ctx.pack,instruction,decoding('authorization.merchant.merchant_name','Merchant X'),ctx.now);
+ expect(reviewed.clarifications).toEqual(expect.arrayContaining([expect.objectContaining({key:'unresolved:authorization.merchant.merchant_name',resolution:'purchase_review'})]));
+ expect(reviewed.clarifications[0]?.diagnostic).toEqual({field:'authorization.merchant.merchant_name',decoded_value:'Merchant X',source_excerpt:instruction,reason:'This decoded field and value have no executable permission mapping.'});
+ const parameters=applyParameters(reviewed as WalletPreparation,reviewed.config!.parameters,ctx.pack);
+ expect(parameters.manual_review_requirements).toEqual([{source_excerpt:instruction,description:instruction}]);
+ expect(()=>applyParameters(reviewed as WalletPreparation,{...parameters,manual_review_requirements:[]},ctx.pack)).toThrow('cannot be widened');
+});
+it('never treats an arbitrary Review prefix as permission to drop a merchant prohibition',()=>{
+ const ctx=fixture(),instruction='Buy groceries for at most CHF 25. Never buy from Alpine Basket.';
+ const d=decoding('authorization.items[].item_category','groceries');d.instruction=instruction;d.variables[0]!.source_excerpt='Buy groceries';
+ d.unmapped_requirements=[{source_excerpt:'Never buy from Alpine Basket.',description:'Review: Never buy from Alpine Basket.',reason:'no_native_field'}];
+ const reviewed=preparePermissions(ctx.pack,instruction,d,ctx.now);
+ expect(reviewed.clarifications).toEqual(expect.arrayContaining([expect.objectContaining({key:'unresolved:requirement:0',resolution:'purchase_review'})]));
+ expect(reviewed.config!.parameters.manual_review_requirements).toEqual([{source_excerpt:instruction,description:instruction}]);
+ expect(()=>applyParameters(reviewed as WalletPreparation,{...reviewed.config!.parameters,manual_review_requirements:[]},ctx.pack)).toThrow('cannot be widened');
+});
+it('keeps only the exact supported currency-repair diagnostic as an informational note',()=>{
+ const ctx=fixture(),instruction='Buy groceries for at most CHF 25.';
+ const d=decoding('authorization.items[].item_category','groceries');d.instruction=instruction;d.variables[0]!.source_excerpt='Buy groceries';
+ d.unmapped_requirements=[{source_excerpt:instruction,description:'Review: The CHF amount constraint is kept. No payment-currency restriction was requested.',reason:'no_native_field'}];
+ const reviewed=preparePermissions(ctx.pack,instruction,d,ctx.now);
+ expect(reviewed.clarifications).toEqual([]);expect(reviewed.config!.parameters).toMatchObject({max_order_chf:'25',manual_review_requirements:[],allowed_currencies:null});
+ d.unmapped_requirements[0]!.source_excerpt='Buy groceries';
+ expect(preparePermissions(ctx.pack,instruction,d,ctx.now).config!.parameters.manual_review_requirements).toHaveLength(1);
+ d.instruction='Buy groceries.';d.unmapped_requirements[0]!.source_excerpt=d.instruction;
+ expect(preparePermissions(ctx.pack,d.instruction,d,ctx.now).config!.parameters.manual_review_requirements).toHaveLength(1);
+});
 it('compiles an explicit merchant ID restriction into executable permissions and shows it',()=>{const ctx=fixture();const reviewed=preparePermissions(ctx.pack,'Buy only from Merchant X.',decoding('authorization.merchant.merchant_id','M0001'),ctx.now);expect(reviewed.config?.parameters.allowed_merchant_ids).toEqual(['M0001']);expect(reviewed.permissions.find(r=>r.key==='merchant_ids')?.value).toBe('M0001');});
 it('recognizes a redundant one-grocery-item requirement only when both category and quantity are enforced',()=>{const ctx=fixture();const decoded=decoding('mandate.uncertainty_policy','ask');decoded.variables=[];decoded.unmapped_requirements=[{source_excerpt:'Buy one ordinary grocery item.',description:'Purchase must be for one ordinary grocery item.',reason:'ambiguous'}];const prep=preparePermissions(ctx.pack,'Buy one ordinary grocery item for CHF 20 or less. Ask me when uncertain.',decoded,ctx.now);expect(prep.clarifications.some(c=>c.key.startsWith('unresolved:'))).toBe(false);expect(prep.config?.parameters).toMatchObject({allowed_item_categories:['groceries'],max_quantity_per_order:1});const missingQuantity=preparePermissions(ctx.pack,'Buy groceries for CHF 20 or less. Ask me when uncertain.',decoded,ctx.now);expect(missingQuantity.clarifications.some(c=>c.key.startsWith('unresolved:'))).toBe(true);decoded.unmapped_requirements[0]!.description='Purchase must be for one allergen-free grocery item.';expect(preparePermissions(ctx.pack,'Buy one ordinary grocery item for CHF 20 or less.',decoded,ctx.now).clarifications.some(c=>c.key.startsWith('unresolved:'))).toBe(true);});
 

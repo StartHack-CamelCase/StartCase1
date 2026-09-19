@@ -1,3 +1,4 @@
+import { captureBehaviorMLFeatures } from './behavior-ml-features.js';
 import { DEFAULT_BEHAVIOR_PARAMETERS } from '../../../contracts/src/behavior.js';
 import type { BehaviorObservation, BehaviorProfile, HabitFilterId } from '../../../contracts/src/behavior.js';
 import type { Assessment, FilterResult, SimRun } from '../../../contracts/src/simulation.js';
@@ -39,6 +40,7 @@ export function applyLearnedHabits(ctx:EvaluationContext, results:FilterResult[]
     ?candidate:buildBehaviorProfile([],{customerId,scope,asOf:ctx.event.authorization.timestamp,timezone:p.timezone});
   const confirmations:BehaviorObservation[]=[],applied_filter_ids:HabitFilterId[]=[];
   if(profile.warning)return {enabled:true,profile:structuredClone(profile),applied_filter_ids,confirmations};
+  const ml_features=captureBehaviorMLFeatures(ctx,profile,results);
   for(let index=0;index<results.length;index++){
     const r=results[index]!;
     if(!eligible(r.filter_id)||!r.reasons.some(reason=>reason.code===reasons[r.filter_id as HabitFilterId]))continue;
@@ -59,7 +61,8 @@ export function applyLearnedHabits(ctx:EvaluationContext, results:FilterResult[]
     adapted.evidence[0]!.method='confirmed-habits-v1';
     results[index]=adapted;applied_filter_ids.push(r.filter_id);
   }
-  return {enabled:true,profile:structuredClone(profile),applied_filter_ids,confirmations};
+  for(const snapshot of ml_features)snapshot.was_suppressed=applied_filter_ids.includes(snapshot.filter_id);
+  return {enabled:true,profile:structuredClone(profile),applied_filter_ids,confirmations,ml_features};
 }
 
 /** Existing durable decision records are the source of truth. Rebuilding the

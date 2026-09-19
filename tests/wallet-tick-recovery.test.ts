@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder} from './helpers/configured-instruction-decoder.js';
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -8,7 +9,7 @@ import { createLocalRuntime } from "../packages/local-runtime/src/runtime.js";
 describe("wallet tick continues after a pending proposal", () => {
   it("processes later proposals without counting pending funds as approved", async () => {
     const dir = await mkdtemp(join(tmpdir(), "wallet-tick-"));
-    const runtime = await createLocalRuntime({ rootDir: resolve("."), dataDir: resolve("data"), stateDir: join(dir, "state"), outputDir: join(dir, "output"), now: () => new Date("2026-09-19T08:00:00.000Z"), instructionDecoder: { model: "test", configured: false, decode: async () => { throw new Error("no model"); } } });
+    const runtime = await createLocalRuntime({ rootDir: resolve("."), dataDir: resolve("data"), stateDir: join(dir, "state"), outputDir: join(dir, "output"), now: () => new Date("2026-09-19T08:00:00.000Z"), instructionDecoder:configuredInstructionDecoder() });
     const scenario = runtime.pack.scenarios.find((candidate) => candidate.scenario_id === "SCEN0003")!;
     const prep = runtime.wallet.prepare({ scenario_id: scenario.scenario_id, instruction: scenario.cardholder_instruction, mode: "local" }, "tick-prep");
     while (runtime.wallet.getPreparation(prep.preparation_id).status === "processing") await new Promise((resolve) => setTimeout(resolve, 5));

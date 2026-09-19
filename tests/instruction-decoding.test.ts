@@ -112,6 +112,25 @@ describe("instruction decoding contracts", () => {
 });
 
 describe("single remote request adapter", () => {
+  it('keeps multiline input verbatim while every schema excerpt is an exact control-free substring',async()=>{
+    const {fields}=await loadInstructionFields(SCHEMA);
+    const instruction='Buy a monitor\r\n27-inch IPS panel\twith warranty;\nand the price is less to 300';
+    const schema=instructionModelSchema(fields,instruction);
+    const literals:string[]=[];
+    const visit=(value:unknown):void=>{if(!value||typeof value!=='object')return;const v=value as Record<string,unknown>;if(Array.isArray(v['enum']))literals.push(...v['enum'].filter((x):x is string=>typeof x==='string'));Object.values(v).forEach(visit);};
+    visit(schema);expect(literals.every(value=>!/[\u0000-\u001f]/.test(value))).toBe(true);
+    const excerpts=(((schema['properties'] as any).variables.items.properties.source_excerpt.enum) as Array<string|null>).filter((x):x is string=>x!==null);
+    expect(excerpts.length).toBeGreaterThan(2);expect(excerpts.every(excerpt=>instruction.includes(excerpt))).toBe(true);
+    const fetcher=vi.fn<typeof fetch>(async()=>Response.json({id:'resp_multiline',model:'gpt-5.4',status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({variables:[],unmapped_requirements:[]})}]}]}));
+    await createOpenAIInstructionDecoder({OPENAI_API_KEY:'secret'},fetcher).decode(instruction,fields);
+    expect(JSON.parse(JSON.parse(String(fetcher.mock.calls[0]![1]!.body)).input).instruction).toBe(instruction);
+  });
+
+  it('reports schema rejection accurately and never exposes provider text or credentials',async()=>{
+    const fetcher=vi.fn<typeof fetch>(async()=>Response.json({error:{code:'invalid_json_schema',param:'text.format.schema',message:'secret raw provider payload'}},{status:400,headers:{'x-request-id':'req_schema'}}));
+    await expect(createOpenAIInstructionDecoder({OPENAI_API_KEY:'secret'},fetcher).decode('Buy a monitor',[])).rejects.toMatchObject({code:'instruction_decoding_schema',message:expect.not.stringContaining('secret'),details:{http_status:400,provider_code:'invalid_json_schema',param:'text.format.schema',request_id:'req_schema',retryable:false}});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it.each([false, true])("keeps habitual-merchant requirements without inventing channel ambiguity (existing requirement: %s)", async (existing) => {
     const { fields } = await loadInstructionFields(SCHEMA);
     const instruction = "Buy one ordinary grocery item for CHF 20 or less from a shop I use regularly.";
@@ -174,13 +193,13 @@ describe("single remote request adapter", () => {
     expect(() => parseInstructionModelOutput(output, instruction, fields)).toThrow(AppError);
   });
 
-  it("uses the fast gpt-5.4-mini sparse-output contract", async () => {
+  it("uses the gpt-5.4 reasoning decoder with strict sparse output", async () => {
     const { fields } = await loadInstructionFields(SCHEMA);
     const fetcher = vi.fn<typeof fetch>(async () => Response.json({ id: "resp_sparse", model: "gpt-5.4-mini", status: "completed", output: [{ content: [{ type: "output_text", text: JSON.stringify({ variables: {}, unmapped_requirements: [] }) }] }], usage: {} }));
     const adapter = createOpenAIInstructionDecoder({ OPENAI_API_KEY: "test-secret" }, fetcher);
     await expect(adapter.decode(INSTRUCTION, fields)).resolves.toMatchObject({ output: { variables: expect.arrayContaining([expect.objectContaining({ status: "absent" })]) } });
     const body = JSON.parse(String(fetcher.mock.calls[0]![1]!.body));
-    expect(body.model).toBe("gpt-5.4-mini"); expect(body.reasoning).toEqual({ effort: "none" }); expect(body.max_output_tokens).toBe(6000); expect(body.store).toBe(false); expect(body.tools).toBeUndefined();
+    expect(body.model).toBe("gpt-5.4"); expect(body.reasoning).toEqual({ effort: "medium" }); expect(body.max_output_tokens).toBe(10000); expect(body.store).toBe(false); expect(body.tools).toBeUndefined();
   });
   it("sends only the exact instruction and schema, with strict output and no stored conversation", async () => {
     const { fields } = await loadInstructionFields(SCHEMA);
@@ -193,7 +212,7 @@ describe("single remote request adapter", () => {
     expect(url).toBe("https://api.openai.com/v1/responses");
     const body = JSON.parse(String(options!.body));
     expect(JSON.parse(body.input)).toEqual({ instruction: INSTRUCTION, fields });
-    expect(body).toMatchObject({ model: "gpt-5.4-mini", store: false, reasoning: { effort: "none" }, text: { format: { type: "json_schema", strict: true } } });
+    expect(body).toMatchObject({ model: "gpt-5.4", store: false, reasoning: { effort: "medium" }, text: { format: { type: "json_schema", strict: true } } });
     expect(body.tools).toBeUndefined();
     expect(body.previous_response_id).toBeUndefined();
     expect(JSON.stringify(body)).not.toContain("test-secret");
@@ -224,7 +243,43 @@ describe("single remote request adapter", () => {
 });
 
 describe("persistent decoding service and routes", () => {
-  it("coalesces concurrent calls, caches across restart and preserves instruction/provenance", async () => {
+  it('retries temporary provider failures within the same action, without reusing an old result',async()=>{
+    const provider=decoder();
+    provider.decode.mockRejectedValueOnce(new AppError(502,'instruction_decoding_provider','Temporarily unavailable',{retryable:true}));
+    provider.decode.mockRejectedValueOnce(new AppError(502,'instruction_decoding_network','Connection interrupted'));
+    const instance=await service(provider,join(await directory(),'decodings.json'));
+    const first=await instance.decodeText(SCENARIO,INSTRUCTION);
+    expect(provider.decode).toHaveBeenCalledTimes(3);
+    const second=await instance.decodeText(SCENARIO,INSTRUCTION);
+    expect(second.decoding_id).not.toBe(first.decoding_id);expect(provider.decode).toHaveBeenCalledTimes(4);
+    expect(instance.getCompleted(SCENARIO,first.decoding_id)).toEqual(first);
+  });
+
+  it('regenerates an invalid output once and never treats a partial response as permissions',async()=>{
+    const provider=decoder();
+    provider.decode.mockImplementationOnce(async(_instruction,fields)=>({output:{variables:variables(fields).variables.slice(1),unmapped_requirements:[]},model:'fixture',response_id:'resp_invalid',usage:{input_tokens:1,output_tokens:1,reasoning_tokens:0}}));
+    const instance=await service(provider,join(await directory(),'decodings.json'));
+    await instance.decodeText(SCENARIO,INSTRUCTION);
+    expect(provider.decode).toHaveBeenCalledTimes(2);
+    expect((provider.decode.mock.calls[1] as unknown as unknown[])[2]).toMatchObject({feedback:expect.stringContaining('failed validation')});
+    expect(instance.get(SCENARIO)).toMatchObject({status:'completed',error:null});
+  });
+
+  it.each(['instruction_decoding_auth','instruction_decoding_schema','instruction_decoding_quota'])('does not retry nonrecoverable %s',async code=>{
+    const provider=decoder();provider.decode.mockRejectedValue(new AppError(502,code,'Configuration must be corrected',{retryable:false}));
+    const instance=await service(provider,join(await directory(),'decodings.json'));
+    await expect(instance.decodeText(SCENARIO,INSTRUCTION)).rejects.toMatchObject({code});
+    expect(provider.decode).toHaveBeenCalledTimes(1);expect(instance.get(SCENARIO)).toMatchObject({status:'failed',result:null});
+  });
+
+  it('bounds exhausted transient retries and permits a later fresh action',async()=>{
+    const provider=decoder();provider.decode.mockRejectedValue(new AppError(502,'instruction_decoding_provider','Temporarily unavailable',{retryable:true}));
+    const instance=await service(provider,join(await directory(),'decodings.json'));
+    await expect(instance.decodeText(SCENARIO,INSTRUCTION)).rejects.toMatchObject({code:'instruction_decoding_provider'});
+    expect(provider.decode).toHaveBeenCalledTimes(3);expect(instance.get(SCENARIO)).toMatchObject({status:'failed',result:null});
+  });
+
+  it("coalesces only in-flight calls and makes a fresh call after restart while preserving archived provenance", async () => {
     const provider = decoder();
     const path = join(await directory(), "decodings.json");
     const first = await service(provider, path);
@@ -234,8 +289,8 @@ describe("persistent decoding service and routes", () => {
     expect(a).toMatchObject({ instruction: INSTRUCTION, model_requested: "gpt-5-nano", response_id: "resp_fixture", prompt_version: INSTRUCTION_PROMPT_VERSION });
     expect(a.decoding_id).toMatch(/^LOCAL_DEC_/);
     const reloaded = await service(provider, path);
-    expect(await reloaded.decode(SCENARIO, true)).toEqual(a);
-    expect(provider.decode).toHaveBeenCalledTimes(1);
+    expect((await reloaded.decode(SCENARIO, true)).decoding_id).not.toBe(a.decoding_id);
+    expect(provider.decode).toHaveBeenCalledTimes(2);
     const changedModel = await service({ ...provider, model: "different-model", configured: false }, path);
     expect(changedModel.get(SCENARIO).result).toBeNull();
     expect(changedModel.getCompleted(SCENARIO, a.decoding_id)).toEqual(a);
@@ -243,7 +298,7 @@ describe("persistent decoding service and routes", () => {
     expect(() => reloaded.get(asId<ScenarioId>("SCEN9999"))).toThrow(AppError);
   });
 
-  it("records failure and requires explicit retry, even across server restart", async () => {
+  it("records failure and a new decode retries the provider after restart", async () => {
     const provider = decoder();
     provider.decode.mockRejectedValueOnce(new AppError(502, "instruction_decoding_quota", "Quota atteint."));
     const path = join(await directory(), "decodings.json");
@@ -251,15 +306,14 @@ describe("persistent decoding service and routes", () => {
     await expect(first.decode(SCENARIO)).rejects.toMatchObject({ code: "instruction_decoding_quota" });
     const reloaded = await service(provider, path);
     expect(reloaded.get(SCENARIO).status).toBe("failed");
-    await expect(reloaded.decode(SCENARIO)).rejects.toMatchObject({ statusCode: 409 });
     expect(provider.decode).toHaveBeenCalledTimes(1);
-    await reloaded.decode(SCENARIO, true);
+    await reloaded.decode(SCENARIO);
     expect(provider.decode).toHaveBeenCalledTimes(2);
   });
 
   it("never saves an incomplete or invented model result as a valid decoding", async () => {
     const provider = decoder();
-    provider.decode.mockImplementationOnce(async (_instruction, fields) => {
+    provider.decode.mockImplementation(async (_instruction, fields) => {
       const output = variables(fields);
       output.variables.pop();
       return { output, model: "gpt-5-nano-fixture", response_id: "resp_invalid", usage: { input_tokens: 1, output_tokens: 1, reasoning_tokens: 0 } };
@@ -270,8 +324,8 @@ describe("persistent decoding service and routes", () => {
     expect(instance.get(SCENARIO)).toMatchObject({ status: "failed", result: null });
     const reloaded = await service(provider, path);
     expect(reloaded.get(SCENARIO).result).toBeNull();
-    await expect(reloaded.decode(SCENARIO)).rejects.toMatchObject({ statusCode: 409 });
-    expect(provider.decode).toHaveBeenCalledTimes(1);
+    await expect(reloaded.decode(SCENARIO)).rejects.toMatchObject({ code: "instruction_decoding_invalid" });
+    expect(provider.decode).toHaveBeenCalledTimes(4);
   });
 
   it("marks an interrupted attempt after restart without making another call", async () => {
@@ -285,8 +339,9 @@ describe("persistent decoding service and routes", () => {
     await writeFile(path, JSON.stringify(stored));
     const reloaded = await service(provider, path);
     expect(reloaded.get(SCENARIO)).toMatchObject({ status: "interrupted", result: null });
-    await expect(reloaded.decode(SCENARIO)).rejects.toMatchObject({ statusCode: 409 });
     expect(provider.decode).toHaveBeenCalledTimes(1);
+    await reloaded.decode(SCENARIO);
+    expect(provider.decode).toHaveBeenCalledTimes(2);
   });
 
   it("decodes via API, attaches trusted snapshots to draft/mandate, and leaves purchases unevaluated", async () => {
@@ -299,7 +354,8 @@ describe("persistent decoding service and routes", () => {
     expect(response.statusCode).toBe(200);
     const result = response.json<InstructionDecoding>();
     const repeated = await application.inject({ ...request, headers: { "idempotency-key": "decode-2" } });
-    expect(repeated.json()).toEqual(result);
+    expect(repeated.json().decoding_id).not.toBe(result.decoding_id);
+    expect((await application.inject(request)).json()).toEqual(result);
     const detail = (await application.inject({ method: "GET", url: `/api/scenarios/${SCENARIO}` })).json<ScenarioDetail>();
     const draftResponse = await application.inject({ method: "POST", url: "/api/mandate-drafts", headers: { "idempotency-key": "draft-001" }, payload: draftPayload(detail, result.decoding_id) });
     expect(draftResponse.statusCode).toBe(201);
@@ -317,8 +373,8 @@ describe("persistent decoding service and routes", () => {
     const reloaded = await app(provider, path);
     const persisted = await reloaded.inject({ method: "GET", url: `/api/mandate-drafts/${draft.draft_id}` });
     expect(persisted.json()).toEqual(draft);
-    expect((await reloaded.inject({ ...request, headers: { "idempotency-key": "decode-3" } })).json()).toEqual(result);
-    expect(provider.decode).toHaveBeenCalledTimes(1);
+    expect((await reloaded.inject({ ...request, headers: { "idempotency-key": "decode-3" } })).json().decoding_id).not.toBe(result.decoding_id);
+    expect(provider.decode).toHaveBeenCalledTimes(3);
     expect(provider.decode.mock.calls[0]![0]).toBe(detail.scenario.cardholder_instruction);
   });
 
@@ -351,9 +407,9 @@ it('reconstructs absent fields from a sparse strict response and rejects duplica
  expect(()=>parseInstructionModelOutput({variables:[{...ceiling,field:'invented'}],unmapped_requirements:[]},instruction,fields)).toThrow();
  const inspect=(v:unknown):void=>{if(!v||typeof v!=='object')return;const obj=v as Record<string,unknown>;if(obj['type']==='object'){expect(obj['additionalProperties']).toBe(false);expect(obj['required']).toEqual(Object.keys(obj['properties'] as object));}for(const child of Object.values(obj))Array.isArray(child)?child.forEach(inspect):inspect(child);};inspect(instructionModelSchema(fields,instruction));
 });
-it.each([null,'CHF'])('normalizes an invented currency value even when currency metadata is %s',async(metadata)=>{
- const {fields}=await loadInstructionFields(SCHEMA);const instruction='Maximum CHF 50.';
- const output={variables:[{field:'authorization.billing_amount_chf',status:'present',value:50,operator:'<=',currency:'CHF',scope:'purchase',period_days:null,source_excerpt:instruction,note:null},{field:'authorization.currency',status:'present',value:'CHF',operator:'=',currency:metadata,scope:'purchase',period_days:null,source_excerpt:instruction,note:null}],unmapped_requirements:[]};
+it.each([[null,false],['CHF',false],[null,true],['CHF',true]] as const)('normalizes an invented currency with metadata %s and multiline input %s',async(metadata,multiline)=>{
+ const {fields}=await loadInstructionFields(SCHEMA);const sourceExcerpt='Maximum CHF 50.';const instruction=multiline?`Buy a monitor.\n${sourceExcerpt}`:sourceExcerpt;
+ const output={variables:[{field:'authorization.billing_amount_chf',status:'present',value:50,operator:'<=',currency:'CHF',scope:'purchase',period_days:null,source_excerpt:sourceExcerpt,note:null},{field:'authorization.currency',status:'present',value:'CHF',operator:'=',currency:metadata,scope:'purchase',period_days:null,source_excerpt:sourceExcerpt,note:null}],unmapped_requirements:[]};
  const decode=createOpenAIInstructionDecoder({OPENAI_API_KEY:'fake'},async()=>new Response(JSON.stringify({id:'response1',model:'gpt-5.4-mini',status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]})));
- const result=(await decode.decode(instruction,fields)).output as InstructionVariables;expect(result.variables.find(v=>v.field==='authorization.currency')?.status).toBe('absent');expect(result.variables.find(v=>v.field==='authorization.billing_amount_chf')?.currency).toBe('CHF');expect(result.unmapped_requirements[0]?.description).toContain('Review:');
+ const result=(await decode.decode(instruction,fields)).output as InstructionVariables;expect(result.variables.find(v=>v.field==='authorization.currency')?.status).toBe('absent');expect(result.variables.find(v=>v.field==='authorization.billing_amount_chf')?.currency).toBe('CHF');expect(result.unmapped_requirements[0]?.description).toContain('Review:');expect(result.unmapped_requirements[0]?.source_excerpt).toBe(sourceExcerpt);
 });

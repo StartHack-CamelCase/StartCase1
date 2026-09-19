@@ -1,6 +1,6 @@
 import type {WalletRunView} from '../../../packages/contracts/src/wallet.js';
 import {renderPurchaseCard,purchaseSkeleton,runLoading} from './wallet-run-view.js';
-import {allowsPurchaseResponse,liveApprovalBody,runStatusText,advanceServerClock,canConfirmQuestions,collectLiveAnswers,confirmationSeconds,countdownText,hasConflictingPurchaseOperation,pendingPurchaseOperation,retryEligible} from './wallet-ui.js';
+import {allowsPurchaseResponse,liveApprovalBody,runStatusText,advanceServerClock,purchaseConfirmation,purchaseReviewSnapshot,collectLiveAnswers,confirmationSeconds,countdownText,hasConflictingPurchaseOperation,pendingPurchaseOperation,retryEligible} from './wallet-ui.js';
 import type {PendingOperation} from './operation-state.js';
 
 type Options={host:HTMLElement;runId:string;load:()=>Promise<WalletRunView>;openSession:(scenarioId:string)=>Promise<void>;mutate:(path:string,body:unknown)=>Promise<unknown>;pendingRequest:(path:string)=>PendingOperation|null;notice:(error:unknown)=>void;clearNotice:()=>void;onDispose:(dispose:()=>void)=>void};
@@ -88,7 +88,7 @@ export async function mountRunPage(o:Options):Promise<void> {
   const left=rail.scrollLeft;let added=0;
   for(const p of v.purchases){
    const recovery=recoveryFor(p.authorization_id);
-   const key=JSON.stringify([p.merchant_name,p.description,p.amount_chf,p.items,p.assessment?.assessment_id,p.assessment?.revision,p.assessment?.execution_state,p.assessment?.decision,p.assessment?.lock?.expires_at,p.platform_status,v.status,v.mandate_status,recovery?.key]);
+   const key=JSON.stringify([p.merchant_name,p.description,p.amount_chf,p.items,p.assessment?.assessment_id,p.assessment?.revision,p.assessment?.execution_state,p.assessment?.decision,p.assessment?.lock?.expires_at,p.assessment?purchaseReviewSnapshot(p.assessment):null,p.platform_status,v.status,v.mandate_status,recovery?.key]);
    const existing=cards.get(p.authorization_id);
    if(existing){if(existing.signature!==key&&!busy(p.authorization_id)){replaceCard(existing.element,cardMarkup(p,recovery),existing.element.dataset['offerHash']===(p.assessment?.offer_hash??''));existing.signature=key;existing.element.dataset['offerHash']=p.assessment?.offer_hash??'';}continue;}
    const template=document.createElement('template');template.innerHTML=cardMarkup(p,recovery);const element=template.content.firstElementChild as HTMLElement;element.tabIndex=-1;element.dataset['offerHash']=p.assessment?.offer_hash??'';
@@ -103,10 +103,11 @@ export async function mountRunPage(o:Options):Promise<void> {
  async function perform(id:string,work:()=>Promise<unknown>){if(actionBlocked(id)||(id==='*'&&pending.size>0))return;pending.add(id);++readSequence;o.clearNotice();syncTimers();try{await work();}catch(error){if(!disposed)o.notice(error);}finally{if(!disposed){reconciling.add(id);await refresh();}}}
  root.addEventListener('submit',event=>{
   const form=event.target;if(!(form instanceof HTMLFormElement)||!form.matches('.human-form'))return;event.preventDefault();
-  const p=view.purchases.find(p=>p.authorization_id===form.dataset['authorization']),a=p?.assessment;if(!p||!a||a.execution_state!=='awaiting_user'||a.decision!=='step_up'||!allowsPurchaseResponse(view))return;
+  const confirmation=purchaseConfirmation(view,form.dataset['authorization'],form.dataset['reviewSnapshot']);
+  if(!confirmation){void refresh();return;}
+  const {purchase:p,assessment:a,answers}=confirmation;
   if((confirmationSeconds(a.lock?.expires_at,now())??0)<=0){syncTimers();return;}
-  const questions=a.questions.filter(q=>q.state==='open');if(!canConfirmQuestions(questions))return;
-  void perform(p.authorization_id,async()=>{const answers=collectLiveAnswers(new FormData(form),questions);return vMutate(p.authorization_id,a.revision,a.offer_hash,answers);});
+  void perform(p.authorization_id,()=>vMutate(p.authorization_id,a.revision,a.offer_hash,answers));
  },{signal:listeners.signal});
  function vMutate(authorizationId:string,revision:number,offerHash:string,answers:ReturnType<typeof collectLiveAnswers>){return view.mode==='local'?o.mutate(`/api/simulations/${o.runId}/authorizations/${authorizationId}/human-responses`,{answers,expected_revision:revision,offer_hash:offerHash}):o.mutate(`/api/wallet/runs/${o.runId}/human-responses`,liveApprovalBody(authorizationId,{revision,offer_hash:offerHash},answers));}
  root.addEventListener('click',event=>{

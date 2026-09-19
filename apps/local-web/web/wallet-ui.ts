@@ -26,16 +26,25 @@ export function countdownText(seconds:number|null):string {
  return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
 }
 export function canConfirmQuestions(questions:ReadonlyArray<{kind:string}>):boolean {
- return questions.length>0&&questions.every(q=>['confirm_risk','provide_evidence','choose_variant'].includes(q.kind));
+ return questions.length>0&&questions.every(q=>q.kind==='confirm_risk'||q.kind==='confirm_requirement');
 }
 export function retryEligible(a:Assessment|null,mode:string):boolean{return mode==='local'&&!!a&&['expired','technical_hold'].includes(a.execution_state)&&a.decision!=='approve';}
-export function collectLiveAnswers(data:FormData,questions:ReadonlyArray<{question_id:string;kind:string}>){return questions.map(q=>{
- if(q.kind==='confirm_risk')return {question_id:q.question_id,value:'confirm'};
- if(!['provide_evidence','choose_variant'].includes(q.kind))throw Error('This purchase needs a corrected quote, permissions, or service before confirmation.');
- const value=String(data.get(`value:${q.question_id}`)??'').trim();const source_ref=String(data.get(`source_ref:${q.question_id}`)??'').trim();const source_excerpt=String(data.get(`source_excerpt:${q.question_id}`)??'').trim();
- if(!value||!source_ref||!source_excerpt)throw Error('Provide a verified value and its source for every question before confirming.');
- return {question_id:q.question_id,value,source_ref,source_excerpt};
-});}
+export function collectLiveAnswers(questions:ReadonlyArray<{question_id:string;kind:string}>){
+ if(!canConfirmQuestions(questions))throw Error('This purchase needs verification, a corrected quote, permissions, or service before confirmation.');
+ return questions.map(q=>({question_id:q.question_id,value:'confirm'}));
+}
+export function purchaseReviewSnapshot(a:Pick<Assessment,'revision'|'offer_hash'|'questions'>):string {
+ return JSON.stringify([a.revision,a.offer_hash,a.questions.filter(q=>q.state==='open').map(q=>[q.question_id,q.kind,q.prompt])]);
+}
+/** A binary answer belongs only to the card and exact review currently shown. */
+export function purchaseConfirmation(view:WalletRunView,authorizationId:string|undefined,snapshot:string|undefined){
+ if(!allowsPurchaseResponse(view))return null;
+ const purchase=view.purchases.find(p=>p.authorization_id===authorizationId),assessment=purchase?.assessment;
+ if(!purchase||!assessment||assessment.execution_state!=='awaiting_user'||assessment.decision!=='step_up'||snapshot!==purchaseReviewSnapshot(assessment))return null;
+ const questions=assessment.questions.filter(q=>q.state==='open');
+ if(!canConfirmQuestions(questions))return null;
+ return {purchase,assessment,answers:collectLiveAnswers(questions)};
+}
 
 export function parsePermissionJson(text:string):Record<string,unknown> {
  let value:unknown;

@@ -397,12 +397,22 @@ describe("malformed query, policy and route error matrix", () => {
     expect(response.json().error.code).toBe("invalid_policy");
     expect((await feed()).data).toEqual([]);
   });
-  it("does not create a run from a draft, mismatched instruction, unknown scenario or revoked mandate", async () => {
+  it("preserves a custom confirmed instruction and its hard rules in the scenario snapshot", async () => {
+    const original = policy();
+    const instruction = original.instruction.replace('CHF 20', 'CHF 19');
+    const hard_rules = [{ ...priceRule, value: 19 }];
+    const created = await start('SCEN0000', app, { ...original, instruction, hard_rules });
+    const envelope = await poll();
+    expect(envelope.run_id).toBe(created.runId);
+    expect(envelope.data.mandate).toMatchObject({ mandate_id: created.mandateId, instruction, hard_rules });
+    expect(envelope.data.authorization).toMatchObject({ scenario_id: 'SCEN0000', billing_amount_chf: 20 });
+    expect((await decide(envelope.authorization_id, 'decline')).statusCode).toBe(200);
+  });
+  it("does not create a run from a draft, unknown scenario or revoked mandate", async () => {
     const draft = (await request("POST", "/v1/mandates", policy())).json<{ draft_id: string }>();
     expect((await request("POST", "/v1/scenario-runs", { scenario_id: "SCEN0000", mandate_id: draft.draft_id })).statusCode).toBe(404);
     const mandate = await createMandate();
     expect((await request("POST", "/v1/scenario-runs", { scenario_id: "SCEN9999", mandate_id: mandate.mandate_id })).statusCode).toBe(404);
-    expect((await request("POST", "/v1/scenario-runs", { scenario_id: "SCEN0001", mandate_id: mandate.mandate_id })).json().error.code).toBe("instruction_mismatch");
     await request("DELETE", `/v1/mandates/${mandate.mandate_id}`);
     expect((await request("POST", "/v1/scenario-runs", { scenario_id: "SCEN0000", mandate_id: mandate.mandate_id })).json().error.code).toBe("mandate_revoked");
     expect(await rows()).toEqual([]);

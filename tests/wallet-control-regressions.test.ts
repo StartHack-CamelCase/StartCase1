@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -12,7 +13,7 @@ afterEach(async () => { for (const resource of resources.splice(0)) { await reso
 async function setup() {
   const directory = await mkdtemp(join(tmpdir(), 'wallet-controls-'));
   const transport = vi.fn(async (): Promise<Response> => { throw new Error('No API request is expected.'); });
-  const app = await createLocalApp({ stateDir: join(directory, 'state'), outputDir: join(directory, 'output'), webDir: resolve('apps/local-web/web'), instructionDecoder: { model: 'disabled-test', configured: false, decode: async () => { throw new Error('No AI request'); } }, liveOptions: { baseUrl: 'http://127.0.0.1:4313', apiKey: 'test', transport, environment: 'mock' } });
+  const app = await createLocalApp({ stateDir: join(directory, 'state'), outputDir: join(directory, 'output'), webDir: resolve('apps/local-web/web'), instructionDecoder:configuredInstructionDecoder(), liveOptions: { baseUrl: 'http://127.0.0.1:4313', apiKey: 'test', transport, environment: 'mock' } });
   resources.push({ app, directory });
   const owner = await session(app, 'SCEN0000');
   return { app, owner, transport };
@@ -122,7 +123,7 @@ it('rejects a confirmation whose explicit mode differs from the saved preparatio
   const options = (await context.app.inject('/api/wallet/options')).json<{ scenarios: Array<{ scenario_id: string; instruction: string }> }>();
   const instruction = options.scenarios.find((scenario) => scenario.scenario_id === 'SCEN0000')!.instruction;
   const prepared = await context.app.inject({ method: 'POST', url: '/api/wallet/prepare', headers: { ...context.owner, 'idempotency-key': 'controls-live-preparation' }, payload: { scenario_id: 'SCEN0000', instruction, mode: 'live' } });
-  const preparation = prepared.json<WalletPreparation>();
+  const preparation = await readyWalletPreparation(async()=>(await context.app.inject(`/api/wallet/preparations/${prepared.json().preparation_id}`)).json<WalletPreparation>());
   const response = await context.app.inject({ method: 'POST', url: `/api/wallet/preparations/${preparation.preparation_id}/confirm`, headers: { ...context.owner, 'idempotency-key': 'controls-mode-mismatch' }, payload: { confirmed: true, mode: 'local', parameters: preparation.config!.parameters } });
   expect(response.statusCode, response.body).toBe(409);
   expect(context.transport).not.toHaveBeenCalled();

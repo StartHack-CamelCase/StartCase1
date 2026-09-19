@@ -55,7 +55,13 @@ export async function createLocalApp(options: LocalAppOptions = {}): Promise<Fas
       } catch {
         throw new AppError(403, "origin_forbidden", "The request origin is invalid.");
       }
-      if (origin.protocol !== "http:" || origin.host !== request.headers.host) {
+      // A tunnel may terminate HTTPS before forwarding HTTP to this server.
+      // Match its preserved Host; never infer a trusted origin from proxy headers.
+      if (
+        (origin.protocol !== "http:" && origin.protocol !== "https:") ||
+        origin.host !== request.headers.host ||
+        origin.origin !== request.headers.origin
+      ) {
         throw new AppError(403, "origin_forbidden", "Cross-origin changes are not allowed.");
       }
     }
@@ -125,6 +131,7 @@ export async function createLocalApp(options: LocalAppOptions = {}): Promise<Fas
   app.get("/wallet", serveIndex);
   app.get("/wallet/new", serveIndex);
   app.get("/wallet/profiles", serveIndex);
+  app.get("/documentation/filters", serveIndex);
   app.get("/wallet/runs/:runId", serveIndex);
 
   app.setNotFoundHandler(async (request, reply) => {

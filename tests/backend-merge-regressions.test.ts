@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder} from './helpers/configured-instruction-decoder.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,12 +23,15 @@ function decoded(instruction:string,variables:InstructionDecoding['variables']=[
  return {instruction,variables,unmapped_requirements:requirements,decoding_id:'audit-merge',schema_version:1,prompt_version:'audit',source_schema_hash:'audit',model_requested:'fixture',model_returned:'fixture',response_id:'fixture',created_at:'2026-09-19T00:00:00Z',duration_ms:0,usage:{input_tokens:0,output_tokens:0,reasoning_tokens:0}};
 }
 
-it.each(['!=','not_in'] as const)('A01 refuses a category exclusion that was never compiled: %s',operator=>{
+it.each(['!=','not_in'] as const)('A01 preserves an uncompiled category exclusion for explicit purchase review: %s',operator=>{
  const {pack,now}=fixture(),instruction='Buy groceries and household goods, but do not buy household items.';
  const decoding=decoded(instruction,[{field:'authorization.items[].item_category',operator,status:'present',value:operator==='not_in'?['household']:'household',scope:null,currency:null,period_days:null,note:null,source_excerpt:'do not buy household items'}]);
  const review=preparePermissions(pack,instruction,decoding,now);
- expect(review.clarifications).toEqual(expect.arrayContaining([expect.objectContaining({key:'unresolved:authorization.items[].item_category'})]));
- expect(()=>applyParameters({...review,instruction,decoding} as WalletPreparation,review.config!.parameters,pack)).toThrow('Cannot start');
+ expect(review.clarifications).toEqual(expect.arrayContaining([expect.objectContaining({key:'unresolved:authorization.items[].item_category',resolution:'purchase_review'})]));
+ const preparation={...review,instruction,decoding} as WalletPreparation;
+ const parameters=applyParameters(preparation,review.config!.parameters,pack);
+ expect(parameters.manual_review_requirements).toEqual([{source_excerpt:instruction,description:instruction}]);
+ expect(()=>applyParameters(preparation,{...parameters,manual_review_requirements:[]},pack)).toThrow('cannot be widened');
 });
 
 it.each([
@@ -61,7 +65,7 @@ it('accepts genuinely empty API feeds',async()=>{
 });
 
 async function localRun(){
- const path=await directory();const runtime=await createLocalRuntime({stateDir:join(path,'state'),outputDir:join(path,'output'),liveOptions:{environment:'disabled',baseUrl:'',apiKey:''},instructionDecoder:{model:'fixture',configured:false,decode:async()=>{throw Error('unexpected AI call');}}});runtimes.push(runtime);
+ const path=await directory();const runtime=await createLocalRuntime({stateDir:join(path,'state'),outputDir:join(path,'output'),liveOptions:{environment:'disabled',baseUrl:'',apiKey:''},instructionDecoder:configuredInstructionDecoder()});runtimes.push(runtime);
  const scenario=runtime.pack.scenarios[0]!,review=runtime.wallet.prepare({scenario_id:scenario.scenario_id,instruction:scenario.cardholder_instruction,mode:'local'},'backend-merge');
  await expect.poll(()=>runtime.wallet.getPreparation(review.preparation_id).status).toBe('ready');
  const actor:HumanActor={actor_id:'fixture-human',customer_id:runtime.wallet.actorCustomer(scenario.scenario_id),role:'simulated_human',channel:'local_ui',authenticated_by_server:true};

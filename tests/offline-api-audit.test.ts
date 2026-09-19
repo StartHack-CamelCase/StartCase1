@@ -1,3 +1,4 @@
+import {configuredInstructionDecoder,readyWalletPreparation} from './helpers/configured-instruction-decoder.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,7 +16,6 @@ const directories: string[] = [];
 const apps = new Set<FastifyInstance>();
 const runtimes = new Set<LocalRuntime>();
 const externalFetch = vi.fn(async () => { throw new Error('External requests are forbidden in this offline audit.'); });
-const decode = vi.fn(async () => { throw new Error('AI decoding is forbidden in this offline audit.'); });
 
 beforeEach(() => {
   vi.stubEnv('LEASH_BASE_URL', '');
@@ -30,7 +30,6 @@ afterEach(async () => {
     for (const runtime of runtimes) await runtime.close();
     for (const directory of directories) await rm(directory, { recursive: true, force: true });
     expect(externalFetch).not.toHaveBeenCalled();
-    expect(decode).not.toHaveBeenCalled();
   } finally {
     apps.clear(); runtimes.clear(); directories.length = 0;
     vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.clearAllMocks();
@@ -49,7 +48,7 @@ function options(dir: string) {
     stateDir: join(dir, 'state'), outputDir: join(dir, 'output'),
     webDir: resolve('apps/local-web/web'),
     now: () => new Date('2026-09-19T09:00:00.000Z'),
-    instructionDecoder: { model: 'offline-audit', configured: false, decode },
+    instructionDecoder:configuredInstructionDecoder(),
   };
 }
 
@@ -78,14 +77,14 @@ async function session(app: FastifyInstance, scenarioId = 'SCEN0001') {
   };
 }
 
-async function prepared(app: FastifyInstance, scenarioId = 'SCEN0001') {
-  const headers = await session(app, scenarioId);
+async function prepared(app: FastifyInstance, scenarioId = 'SCEN0001', originHeaders: Record<string, string> = {}) {
+  const headers = { ...await session(app, scenarioId), ...originHeaders };
   const choices = (await app.inject('/api/wallet/options')).json<{ scenarios: Array<{ scenario_id: string; instruction: string }> }>();
   const instruction = choices.scenarios.find(s => s.scenario_id === scenarioId)!.instruction;
   const payload = { scenario_id: scenarioId, instruction, mode: 'local' };
   const response = await app.inject({ method: 'POST', url: '/api/wallet/prepare', headers, payload });
   expect(response.statusCode, response.body).toBe(202);
-  const prep = (await app.inject(`/api/wallet/preparations/${response.json<WalletPreparation>().preparation_id}`)).json<WalletPreparation>();
+  const prep = await readyWalletPreparation(async()=>(await app.inject(`/api/wallet/preparations/${response.json<WalletPreparation>().preparation_id}`)).json<WalletPreparation>());
   expect(prep.status).toBe('ready');
   const confirm = (parameters: unknown = prep.config!.parameters, requestHeaders = headers) => app.inject({
     method: 'POST', url: `/api/wallet/preparations/${prep.preparation_id}/confirm`,
@@ -95,9 +94,10 @@ async function prepared(app: FastifyInstance, scenarioId = 'SCEN0001') {
   return { headers, payload, prep, confirm };
 }
 
-function runtimePrepared(runtime: LocalRuntime, scenarioId = 'SCEN0003') {
+async function runtimePrepared(runtime: LocalRuntime, scenarioId = 'SCEN0003') {
   const scenario = runtime.pack.scenarios.find(s => s.scenario_id === scenarioId)!;
-  const prep = runtime.wallet.prepare({ scenario_id: scenario.scenario_id, instruction: scenario.cardholder_instruction, mode: 'local' }, 'offline-runtime-prepare');
+  const initial = runtime.wallet.prepare({ scenario_id: scenario.scenario_id, instruction: scenario.cardholder_instruction, mode: 'local' }, 'offline-runtime-prepare');
+  const prep=await readyWalletPreparation(()=>runtime.wallet.getPreparation(initial.preparation_id));
   const actor: HumanActor = { actor_id: `LOCAL_UI_${runtime.wallet.actorCustomer(scenarioId)}`, role: 'simulated_human', customer_id: runtime.wallet.actorCustomer(scenarioId), channel: 'local_ui', authenticated_by_server: true };
   expect(prep.status).toBe('ready');
   return { prep, actor, values: prep.config!.parameters as unknown as Record<string, unknown> };
@@ -145,6 +145,38 @@ describe('offline wallet API audit', () => {
       expect(response.json().error.code).toBe('origin_forbidden');
     },
   );
+
+  it.each([
+    { host: '127.0.0.1:3210', origin: 'http://127.0.0.1:3210' },
+    { host: 'wallet-demo.ngrok-free.app', origin: 'https://wallet-demo.ngrok-free.app' },
+  ])('allows preparation and confirmation from $origin with the same Host', async headers => {
+    const { app } = await appFixture();
+    const x = await prepared(app, 'SCEN0000', headers);
+    const invalidCsrf = await x.confirm(undefined, { ...x.headers, 'x-csrf-token': 'forged' });
+    expect(invalidCsrf.statusCode).toBe(403);
+    expect(invalidCsrf.json().error.code).toBe('G03_HUMAN_CHANNEL_REQUIRED');
+    const response = await x.confirm();
+    expect(response.statusCode, response.body).toBe(200);
+    expect((await app.inject(`/api/wallet/runs/${response.json().run_id}`)).json().mode).toBe('local');
+  });
+
+  it.each([
+    'https://attacker.invalid', 'https://wallet-demo.ngrok-free.app.attacker.invalid',
+    'https://wallet-demo.ngrok-free.app:8443', 'file://wallet-demo.ngrok-free.app',
+    'https://user@wallet-demo.ngrok-free.app', 'https://wallet-demo.ngrok-free.app/path',
+    'https://wallet-demo.ngrok-free.app?query', 'https://wallet-demo.ngrok-free.app#fragment',
+    'https://wallet-demo.ngrok-free.app https://attacker.invalid', 'null',
+  ])('rejects a foreign or malformed tunnel origin %s even with forged proxy headers', async origin => {
+    const { app } = await appFixture();
+    const headers = await session(app, 'SCEN0000');
+    const response = await app.inject({ method: 'POST', url: '/api/wallet/prepare', headers: {
+      ...headers, host: 'wallet-demo.ngrok-free.app', origin,
+      'x-forwarded-host': 'attacker.invalid', 'x-forwarded-proto': 'https',
+      forwarded: 'host=attacker.invalid;proto=https',
+    }, payload: {} });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('origin_forbidden');
+  });
 
   it.each(['', 'short', 'spaces are invalid', 'a'.repeat(201)])('rejects invalid idempotency key %j', async key => {
     const { app } = await appFixture();
@@ -253,7 +285,7 @@ describe('offline wallet API audit', () => {
 describe('offline wallet persistence and recovery', () => {
   it('does not partially revoke the simulation when saving the mandate fails', async () => {
     const { runtime, dir } = await runtimeFixture();
-    const x = runtimePrepared(runtime);
+    const x = await runtimePrepared(runtime);
     const started = await runtime.wallet.confirm(x.prep.preparation_id, x.values, x.actor);
     for (let i = 0; i < 4; i++) runtime.wallet.tick();
     const before = runtime.wallet.getRun(started.run_id);
@@ -271,7 +303,7 @@ describe('offline wallet persistence and recovery', () => {
 
   it('preserves the revoked mandate if updating simulations fails, and recovers on retry', async () => {
     const { runtime, dir } = await runtimeFixture();
-    const x = runtimePrepared(runtime);
+    const x = await runtimePrepared(runtime);
     const started = await runtime.wallet.confirm(x.prep.preparation_id, x.values, x.actor);
     const update = vi.spyOn(runtime.simulations, 'revokeMandate').mockImplementationOnce(() => { throw new Error('injected simulation persistence failure'); });
     await expect(runtime.wallet.revoke(started.run_id, x.actor, 'retry-revoke')).rejects.toThrow('injected simulation persistence failure');
@@ -290,7 +322,7 @@ describe('offline wallet persistence and recovery', () => {
 
   it('resumes a confirmation interrupted after the mandate was saved without duplicating it', async () => {
     const { runtime, dir } = await runtimeFixture();
-    const x = runtimePrepared(runtime);
+    const x = await runtimePrepared(runtime);
     const create = vi.spyOn(runtime.simulations, 'create').mockImplementationOnce(() => { throw new Error('injected interruption before run persistence'); });
     await expect(runtime.wallet.confirm(x.prep.preparation_id, x.values, x.actor)).rejects.toThrow('injected interruption');
     expect(runtime.policies.listMandates()).toHaveLength(1);
@@ -306,7 +338,7 @@ describe('offline wallet persistence and recovery', () => {
 
   it('retains purchases, pending reservations and totals after restart, then revokes durably', async () => {
     const { runtime, dir } = await runtimeFixture();
-    const x = runtimePrepared(runtime);
+    const x = await runtimePrepared(runtime);
     const started = await runtime.wallet.confirm(x.prep.preparation_id, x.values, x.actor);
     for (let i = 0; i < 4; i++) runtime.wallet.tick();
     const before = runtime.wallet.getRun(started.run_id);
@@ -330,7 +362,7 @@ describe('offline wallet persistence and recovery', () => {
 
   it('marks a saved interrupted preparation failed while preserving its instruction', async () => {
     const { runtime, dir } = await runtimeFixture();
-    const { prep } = runtimePrepared(runtime);
+    const { prep } = await runtimePrepared(runtime);
     await runtime.close(); runtimes.delete(runtime);
     const store = new WalletStore(join(dir, 'state', 'wallet.sqlite'));
     store.save({ ...prep, status: 'processing', config: null });
@@ -342,7 +374,7 @@ describe('offline wallet persistence and recovery', () => {
 
   it('detects damaged persisted permissions and leaves the damaged record intact', async () => {
     const { runtime, dir } = await runtimeFixture();
-    const { prep } = runtimePrepared(runtime);
+    const { prep } = await runtimePrepared(runtime);
     await runtime.close(); runtimes.delete(runtime);
     const path = join(dir, 'state', 'wallet.sqlite');
     const db = new DatabaseSync(path);

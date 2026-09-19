@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {advanceServerClock,retryEligible,collectLiveAnswers,parsePermissionJson,confirmationSeconds,countdownText,pendingPurchaseOperation,hasConflictingPurchaseOperation} from '../apps/local-web/web/wallet-ui.js';
+import {advanceServerClock,retryEligible,collectLiveAnswers,parsePermissionJson,confirmationSeconds,countdownText,pendingPurchaseOperation,hasConflictingPurchaseOperation,canConfirmQuestions} from '../apps/local-web/web/wallet-ui.js';
 import {OperationJournal} from '../apps/local-web/web/operation-state.js';
 import {renderReview,renderPurchaseCard} from '../apps/local-web/web/wallet-run-view.js';
 import type {WalletRunView} from '../packages/contracts/src/wallet.js';
@@ -9,8 +9,13 @@ describe('wallet retry eligibility',()=>{
  it('never offers retry for live or approved states',()=>{expect(retryEligible({execution_state:'expired',decision:null} as never,'live')).toBe(false);expect(retryEligible({execution_state:'approved',decision:'approve'} as never,'local')).toBe(false);expect(retryEligible({execution_state:'awaiting_user',decision:'step_up'} as never,'local')).toBe(false);});
 });
 
-it('sends distinct evidence for every live question in one response',()=>{const data=new FormData();for(const [id,value,source] of [['size','43','size chart'],['returns','14','return policy']]){data.set(`value:${id}`,value!);data.set(`source_ref:${id}`,source!);data.set(`source_excerpt:${id}`,`${source}: ${value}`);}expect(collectLiveAnswers(data,[{question_id:'size',kind:'choose_variant'},{question_id:'returns',kind:'provide_evidence'},{question_id:'device',kind:'confirm_risk'}])).toEqual([{question_id:'size',value:'43',source_ref:'size chart',source_excerpt:'size chart: 43'},{question_id:'returns',value:'14',source_ref:'return policy',source_excerpt:'return policy: 14'},{question_id:'device',value:'confirm'}]);});
-it('does not submit a partial set of evidence or substitute yes for a quote repair',()=>{const data=new FormData();data.set('value:one','43');data.set('source_ref:one','size chart');data.set('source_excerpt:one','Size 43');expect(()=>collectLiveAnswers(data,[{question_id:'one',kind:'provide_evidence'},{question_id:'two',kind:'provide_evidence'}])).toThrow('every question');expect(()=>collectLiveAnswers(data,[{question_id:'quote',kind:'replace_quote'}])).toThrow('corrected quote');});
+it('sends only explicit binary confirmation for the reviewed requirements and risks',()=>{
+ expect(collectLiveAnswers([{question_id:'size',kind:'confirm_requirement'},{question_id:'returns',kind:'confirm_requirement'},{question_id:'device',kind:'confirm_risk'}])).toEqual([{question_id:'size',value:'confirm'},{question_id:'returns',value:'confirm'},{question_id:'device',value:'confirm'}]);
+});
+it('does not substitute binary consent for unresolved evidence or a quote repair',()=>{
+ for(const kind of ['provide_evidence','choose_variant','replace_quote','amend_mandate','retry_or_repair'])expect(()=>collectLiveAnswers([{question_id:'risk',kind:'confirm_risk'},{question_id:'blocked',kind}])).toThrow('before confirmation');
+ expect(()=>collectLiveAnswers([])).toThrow('before confirmation');
+});
 
 it('passes the entire JSON object without dropping edited fields',()=>{expect(parsePermissionJson('{"min_order_chf":"20","max_order_chf":"20","unknown":1}')).toEqual({min_order_chf:'20',max_order_chf:'20',unknown:1});expect(()=>parsePermissionJson('{broken')).toThrow('Invalid JSON');for(const input of ['[]','null','20','"text"'])expect(()=>parsePermissionJson(input)).toThrow('must be an object');});
 
@@ -46,11 +51,36 @@ it('holds other live purchases until the shared interrupted response is recovere
 });
 const question=(id:string,kind:Question['kind']):Question=>({question_id:id,kind,fact_key:id,filter_ids:[],evidence_ids:[],prompt:`Review ${id}`,offer_hash:'offer',state:'open',answer_id:null});
 const pending=(questions:Question[])=>({execution_state:'awaiting_user',decision:'step_up',questions,results:[],lock:{expires_at:'2026-09-19T12:02:00Z'}} as unknown as Assessment);
-it.each(['local','live'])('shows one confirmation for several risks and evidence in %s mode',mode=>{
- const html=renderReview(pending([question('device','confirm_risk'),question('burst','confirm_risk'),question('size','choose_variant')]),'AUTH',mode);
+it.each(['local','live'])('shows only accept and decline for several purchase requirements in %s mode',mode=>{
+ const html=renderReview(pending([question('device','confirm_risk'),question('burst','confirm_risk'),question('size','confirm_requirement')]),'AUTH',mode);
  expect(html.match(/<form\b/g)).toHaveLength(1);expect(html.match(/data-review-action="approve"/g)).toHaveLength(1);
- expect(html).toContain('Review device');expect(html).toContain('Review burst');expect(html).toContain('name="value:size"');
+ expect(html).toContain('Review device');expect(html).toContain('Review burst');expect(html).toContain('Review size');
+ expect(html).toContain('Accept this purchase');expect(html).toContain('Decline this purchase');
+ expect(html).not.toMatch(/<(?:input|textarea|select)\b/);expect(html).not.toContain('Verified value');expect(html).not.toContain('Where did you verify it?');expect(html).not.toContain('Exact supporting text');
  expect(html.match(/data-review-action="decline"/g)).toHaveLength(1);expect(html).toContain('data-expires-at="2026-09-19T12:02:00Z"');
+});
+it.each(['local','live'])('collects all custom requirements in one explicit purchase confirmation in %s mode',mode=>{
+ const questions=[{...question('packaging','confirm_requirement'),prompt:'The packaging must be compostable.'},{...question('origin','confirm_requirement'),prompt:'The product must be made in Switzerland.'},question('device','confirm_risk')];
+ expect(canConfirmQuestions(questions)).toBe(true);
+ const html=renderReview(pending(questions),'AUTH',mode);
+ expect(html).toContain('The packaging must be compostable.');expect(html).toContain('The product must be made in Switzerland.');
+ expect(html).toContain('Confirm that this purchase meets every requirement listed above.');
+ expect(html).toContain('If you cannot verify a requirement, decline this purchase.');
+ expect(html.match(/data-review-action="approve"/g)).toHaveLength(1);
+ expect(html.match(/data-review-action="decline"/g)).toHaveLength(1);
+ expect(html).not.toContain('name="value:packaging"');expect(html).not.toContain('Verified value');
+ expect(collectLiveAnswers(questions)).toEqual([{question_id:'packaging',value:'confirm'},{question_id:'origin',value:'confirm'},{question_id:'device',value:'confirm'}]);
+});
+it('keeps an unanswerable rule blocked even when custom requirements can be confirmed',()=>{
+ const questions=[question('custom','confirm_requirement'),question('history','amend_mandate')];
+ expect(canConfirmQuestions(questions)).toBe(false);
+ expect(renderReview(pending(questions),'AUTH','live')).not.toContain('data-review-action="approve"');
+ expect(()=>collectLiveAnswers(questions)).toThrow('permissions');
+});
+it.each(['provide_evidence','choose_variant','replace_quote','retry_or_repair'] as const)('leaves unsupported %s verification with the system and never requests typed evidence',kind=>{
+ const html=renderReview(pending([question('risk','confirm_risk'),question('blocked',kind)]),'AUTH','live');
+ expect(html).not.toContain('data-review-action="approve"');expect(html).toContain('data-review-action="decline"');
+ expect(html).not.toMatch(/<(?:input|textarea|select)\b/);expect(html).not.toContain('Verified value');
 });
 it('does not offer an ineffective partial approval when a rule needs repair or amendment',()=>{
  const html=renderReview(pending([question('device','confirm_risk'),question('history','amend_mandate')]),'AUTH','local',false,'SCEN0003');

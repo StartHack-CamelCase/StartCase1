@@ -11,6 +11,7 @@ import type { SafetyParameters } from '../packages/contracts/src/simulation.js';
 import type { WalletPreparation, WalletRunView } from '../packages/contracts/src/wallet.js';
 import { WALLET_PERMISSION_COMPILER_VERSION } from '../packages/local-runtime/src/services/wallet-service.js';
 import { WalletStore } from '../packages/local-runtime/src/storage/wallet-store.js';
+import { configuredInstructionDecoder } from './helpers/configured-instruction-decoder.js';
 
 const instruction='Buy one ordinary grocery item for CHF 20 or less from a shop I use regularly. Ask me when uncertain.';
 const resources:Array<{app:FastifyInstance;dir:string}>=[];
@@ -33,16 +34,17 @@ function legacyDecoding():InstructionDecoding {
 
 async function setup(scenarioId='SCEN0000',sourceInstruction=instruction){
  const dir=await mkdtemp(join(tmpdir(),'wallet-preparation-refresh-'));
- const decode=vi.fn(async()=>{throw Error('No external AI calls are permitted in this regression');});
- const app=await createLocalApp({stateDir:join(dir,'state'),outputDir:join(dir,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:{model:'test',configured:false,decode}});
+ const decoder=configuredInstructionDecoder();const decode=vi.fn(decoder.decode);
+ const app=await createLocalApp({stateDir:join(dir,'state'),outputDir:join(dir,'output'),webDir:resolve('apps/local-web/web'),instructionDecoder:{...decoder,decode}});
  resources.push({app,dir});
  const session=await app.inject(`/api/wallet/session?scenario_id=${scenarioId}`);
  const headers={cookie:String(session.headers['set-cookie']).split(';')[0]!,'x-csrf-token':session.json().csrf,'idempotency-key':'legacy-prepare-request'};
  const input={scenario_id:scenarioId,instruction:sourceInstruction,mode:'local'};
  const response=await app.inject({method:'POST',url:'/api/wallet/prepare',headers,payload:input});
  expect(response.statusCode,response.body).toBe(202);
- const prep=(await app.inject(`/api/wallet/preparations/${response.json().preparation_id}`)).json<WalletPreparation>();
- expect(prep.status).toBe('ready');
+ let prep!:WalletPreparation;
+ await vi.waitFor(async()=>{prep=(await app.inject(`/api/wallet/preparations/${response.json().preparation_id}`)).json<WalletPreparation>();expect(prep.status).toBe('ready');});
+ expect(decode).toHaveBeenCalledTimes(1);decode.mockClear();
  const parameters=structuredClone(prep.config!.parameters);
  const legacy=structuredClone(prep);
  delete legacy.compiler_version;
@@ -61,10 +63,49 @@ async function setup(scenarioId='SCEN0000',sourceInstruction=instruction){
 }
 
 describe('refreshing stale unconfirmed permission JSON',()=>{
+ it.each([true,false])('invalidates saved fallback permissions even with a current compiler (warning saved: %s)',async warningSaved=>{
+  const text='Buy about CHF 25 groceries.';
+  const x=await setup('SCEN0000',text);
+  x.legacy.decoding=null;
+  x.legacy.compiler_version=WALLET_PERMISSION_COMPILER_VERSION;
+  x.legacy.amount_review_requirement=null;
+  x.legacy.warnings=warningSaved?['AI decoding was unavailable: A decoded field appears more than once.']:[];
+  x.legacy.clarifications=[{key:'unresolved:decoding',label:'Review the complete instruction for each purchase.',type:'text',required:true,value:'',resolution:'purchase_review'}];
+  x.save(x.legacy);
+  const refreshed=(await x.get()).json<WalletPreparation>();
+  expect(refreshed.status).toBe('failed');
+  expect(refreshed.error).toMatch(/OpenAI decoding.*Retry decoding/);
+  expect(refreshed.compiler_version).toBe(WALLET_PERMISSION_COMPILER_VERSION);
+  expect(refreshed.amount_review_requirement).toBeNull();
+  expect(refreshed.config).toBeNull();
+  expect(refreshed.permissions).toEqual([]);
+  expect(refreshed.clarifications).toEqual([]);
+  expect(refreshed.warnings).toEqual([]);
+  const confirmation=await x.confirm(x.parameters);
+  expect(confirmation.statusCode,confirmation.body).toBe(409);
+  expect(confirmation.json().error.code).toBe('permission_review_not_ready');
+  expect((await x.app.inject('/api/wallet/runs')).json().runs).toEqual([]);
+  expect(x.decode).not.toHaveBeenCalled();
+ });
+
+ it('preserves partial legacy consent but cannot start a new run without a successful decoding',async()=>{
+  const x=await setup();
+  x.legacy.decoding=null;
+  x.legacy.confirmation={fingerprint:'frozen-confirmation',parameters:x.parameters,actor_id:'prior-human'};
+  x.save(x.legacy);const saved=x.stored();
+  const response=await x.confirm(x.parameters);
+  expect(response.statusCode,response.body).toBe(409);
+  expect(response.json().error.code).toBe('permission_review_not_ready');
+  expect(x.stored()).toEqual(saved);
+  expect((await x.app.inject('/api/wallet/runs')).json().runs).toEqual([]);
+  expect(x.decode).not.toHaveBeenCalled();
+ });
+
  it.each([
   ['SCEN0002','LOCAL_DEC_f471b167-c0df-44fb-ad61-2d0c6f750f50'],
   ['SCEN0003','LOCAL_DEC_38fbbc61-e398-4662-8bf8-a0dd05420a31'],
   ['SCEN0004','LOCAL_DEC_aa4fd332-8258-4274-a893-2bde33fc8243'],
+  ['SCEN0004','LOCAL_DEC_445b5595-b164-434d-9fda-41bc2910fc6b'],
  ])('repairs the saved %s cardholder paraphrase without calling AI again',async(scenarioId,decodingId)=>{
   const fixtures=JSON.parse(readFileSync(new URL('./fixtures/wallet-official-decodings.json',import.meta.url),'utf8')) as {observed_variants:Array<{decoding:InstructionDecoding}>};
   const decoding=fixtures.observed_variants.find(s=>s.decoding.decoding_id===decodingId)!.decoding;
