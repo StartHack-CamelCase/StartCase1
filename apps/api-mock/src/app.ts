@@ -12,7 +12,7 @@ import { parsePolicyContent, PolicyValidationIssue } from "../../../packages/loc
 
 /** A local contract emulator, not a claim that undocumented hosted behavior is identical. */
 export const LOCAL_MOCK_API_KEY = "local-viseca-test";
-export type MockApiOptions = { dataDir?: string; stateDir?: string; decisionTimeoutMs?: number; humanTimeoutMs?: number };
+export type MockApiOptions = { dataDir?: string; stateDir?: string; decisionTimeoutMs?: number; humanTimeoutMs?: number; contractProfile?: "documented" | "railway" };
 type Json = Record<string, unknown>;
 type Decision = "approve" | "decline" | "step_up";
 type Draft = PolicyContent & { draft_id: string; created_at: string; mandate_id: string | null };
@@ -42,11 +42,19 @@ function string(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) fail(400, "invalid_field", `${field} must be a nonempty string.`);
   return value;
 }
-function publicRecord(record: Authorization): Json {
+function publicRecord(record: Authorization, railway = false): Json {
+  const timedOut = railway && record.status === "declined" && record.resolution_payload === null && (
+    record.decision_payload === null && record.reason_codes.includes("decision_deadline_exceeded") ||
+    record.decision_payload?.["decision"] === "step_up" && record.reason_codes.includes("human_deadline_exceeded")
+  );
+  const status = timedOut ? "timed_out" : railway && record.status === "awaiting_human" ? "awaiting_customer" : record.status;
+  // Hosted expiry preserves the original automated decision, not a new approval.
+  const decision = timedOut ? record.decision_payload?.["decision"] ?? null : record.decision;
   return {
     run_id: record.run_id, authorization_id: record.authorization_id, source_authorization_id: record.source_authorization_id,
-    status: record.status, decision: record.decision, reason_codes: record.reason_codes,
+    status, decision, reason_codes: record.reason_codes,
     deadline_at: record.event.deadline_at, human_deadline_at: record.human_deadline_at, finalized_at: record.finalized_at,
+    ...(railway ? { is_final: record.status === "approved" || record.status === "declined" } : {}),
   };
 }
 function policyOnly(value: PolicyContent): PolicyContent {
@@ -63,6 +71,9 @@ function decisionBody(value: unknown, id: string, human: boolean): Json {
 }
 
 export async function createMockApi(options: MockApiOptions = {}): Promise<FastifyInstance> {
+  if (options.contractProfile !== undefined && !["documented", "railway"].includes(options.contractProfile)) throw new Error("mock_invalid_contract_profile");
+  const railway = options.contractProfile === "railway";
+  const publicAuthorization = (record: Authorization): Json => publicRecord(record, railway);
   const dataDir = resolve(options.dataDir ?? "data");
   const decisionTimeout = options.decisionTimeoutMs ?? 8_000;
   const humanTimeout = options.humanTimeoutMs ?? 120_000;
@@ -141,7 +152,8 @@ export async function createMockApi(options: MockApiOptions = {}): Promise<Fasti
     record.finalized_at = nowIso();
     if (reason) record.reason_codes = [reason];
     state.queue = state.queue.filter((id) => id !== record.authorization_id);
-    emit(reason ? "authorization.expired" : "authorization.finalized", record.status, publicRecord(record), record.run_id, record.authorization_id);
+    const exposed = publicAuthorization(record);
+    emit(reason ? "authorization.expired" : "authorization.finalized", String(exposed["status"]), exposed, record.run_id, record.authorization_id);
   }
   function advance(run: RunRecord): void {
     if (run.status !== "running") return;
@@ -250,6 +262,7 @@ export async function createMockApi(options: MockApiOptions = {}): Promise<Fasti
   app.get("/healthz", async () => ({ status: "ok", version: "local-contract-emulator-1", mode: "mock", emulation: true }));
   app.get("/v1/bootstrap", async () => ({
     api_version: "v1", data_version: pack.pack_version, team_id: "LOCAL_TEST_TEAM", mode: "mock", emulation: true,
+    contract_profile: railway ? "railway" : "documented",
     scenarios: pack.scenarios.map(({ source: _source, ...scenario }) => scenario),
     timeouts: { decision_timeout_ms: decisionTimeout, human_timeout_ms: humanTimeout, max_poll_wait_seconds: 25 },
     limits: { active_runs: 1, team_queue_consumers: 1 }, features: { team_reset: true, human_resolution: true },
@@ -374,7 +387,7 @@ export async function createMockApi(options: MockApiOptions = {}): Promise<Fasti
     const input = decisionBody(request.body, record.authorization_id, false);
     if (record.decision_payload) {
       if (!isDeepStrictEqual(record.decision_payload, input)) fail(409, "decision_conflict", "A different automated decision was already accepted.");
-      return publicRecord(record);
+      return publicAuthorization(record);
     }
     if (record.status !== "pending") fail(409, "authorization_not_pending", "This authorization no longer accepts automated decisions.");
     record.decision_payload = input;
@@ -385,24 +398,25 @@ export async function createMockApi(options: MockApiOptions = {}): Promise<Fasti
       record.status = "awaiting_human";
       record.human_deadline_at = new Date(Date.now() + humanTimeout).toISOString();
       state.queue = state.queue.filter((id) => id !== record.authorization_id);
-      emit("authorization.step_up", "awaiting_human", publicRecord(record), record.run_id, record.authorization_id);
+      emit("authorization.step_up", railway ? "awaiting_customer" : "awaiting_human", publicAuthorization(record), record.run_id, record.authorization_id);
     } else finalize(record, decision);
-    return publicRecord(record);
+    return publicAuthorization(record);
   }));
   app.post<{ Params: { id: string } }>("/v1/authorizations/:id/resolve", async (request) => transaction(() => {
     const record = getAuthorization(request.params.id);
+    if (railway && request.body !== null && typeof request.body === "object" && Object.hasOwn(request.body, "engine_version")) fail(422, "unsupported_resolve_fields", "Unsupported resolve fields: engine_version");
     const input = decisionBody(request.body, record.authorization_id, true);
     if (record.resolution_payload) {
       if (!isDeepStrictEqual(record.resolution_payload, input)) fail(409, "resolution_conflict", "A different human answer was already accepted.");
-      return publicRecord(record);
+      return publicAuthorization(record);
     }
     if (record.status !== "awaiting_human") fail(409, "human_resolution_not_pending", "Only a pending step_up can be resolved.");
     record.resolution_payload = input;
     if (input["reason_codes"]) record.reason_codes = input["reason_codes"] as string[];
     finalize(record, input["decision"] as "approve" | "decline");
-    return publicRecord(record);
+    return publicAuthorization(record);
   }));
-  app.get<{ Querystring: { run_id?: string } }>("/v1/authorizations", async (request) => ({ data: state.authorizations.filter((record) => !request.query.run_id || record.run_id === request.query.run_id).map(publicRecord) }));
+  app.get<{ Querystring: { run_id?: string } }>("/v1/authorizations", async (request) => ({ data: state.authorizations.filter((record) => !request.query.run_id || record.run_id === request.query.run_id).map(publicAuthorization) }));
   app.get<{ Querystring: { since?: string } }>("/v1/events", async (request) => {
     const since = request.query.since === undefined ? 0 : Number(request.query.since);
     if (!Number.isSafeInteger(since) || since < 0 || since > state.cursor) fail(400, "invalid_cursor", "since must be an existing nonnegative event cursor.");

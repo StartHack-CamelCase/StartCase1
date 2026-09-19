@@ -47,7 +47,7 @@ await rebaseShims(target);
 await writeFile(resolve(target, '.env.local'), [
   '# Configuration privée de la copie API. Coller le team token sur la ligne suivante.',
   'TEAM_API_KEY=',
-  'LEASH_BASE_URL=https://saw26api.ashyground-364e1d07.switzerlandnorth.azurecontainerapps.io',
+  'LEASH_BASE_URL=https://leash-api-production.up.railway.app',
   'PORT=3212',
   'AI_ENABLED=false',
   '',

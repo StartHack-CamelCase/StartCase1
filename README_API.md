@@ -32,11 +32,13 @@ clé se font dans le `.env.local` racine.
   `AI_ENABLED=false`, les instructions prises en charge utilisent le parseur local.
 - `VISECA_API_MODE=disabled` désactive l’accès Viseca côté serveur.
 
-Le contrôle distant du 19 septembre a reçu **200 sur `/healthz` puis 401 sur
-`/v1/bootstrap`** avec la clé disponible. Le fonctionnement hébergé n’est donc
-pas présenté comme validé. Une clé valide est nécessaire pour cette dernière
-recette. L’interface indique les erreurs d’authentification; elle ne transforme
-jamais un échec de transport en paiement accepté.
+L’API hébergée utilise `LEASH_BASE_URL=https://leash-api-production.up.railway.app`.
+Le contrôle du 19 septembre confirme que la clé existante est valide : les six
+lectures initiales, dont `/v1/bootstrap`, répondent **200**. Le précédent **401**
+provenait de l’ancienne adresse Azure; il ne démontrait pas une clé invalide.
+Le fichier `.env.local` racine est la configuration de l’application fusionnée;
+celui de `.parallel/viseca-api` ne configure que l’ancienne copie parallèle.
+Après changement d’environnement, redémarrer le serveur et choisir **Online**.
 
 ## Démonstration API reproductible
 
@@ -48,6 +50,8 @@ Wallet : http://127.0.0.1:3212. API locale : http://127.0.0.1:4313. Le bandeau
 Online indique **local API emulator**. Aucune clé réelle n’est utilisée; les
 requêtes sortantes hors boucle locale et le décodage IA sont bloqués.
 Les ports peuvent être changés avec `API_DEMO_PORT` et `API_MOCK_PORT`.
+Pour émuler les statuts et le format `/resolve` observés sur Railway, démarrer
+le mock avec `API_MOCK_CONTRACT_PROFILE=railway npm run api:mock`.
 
 ## Confirmation humaine et `/resolve`
 
@@ -81,5 +85,6 @@ npm run build
 ```
 
 [Résultats des scénarios, couverture et limites](docs/18_API_TEST_MATRIX.md).
+[Campagne réelle Railway : cinq scénarios et `/resolve`](docs/19_INTEGRATION_ONLINE_OFFLINE.md#contrôle-du-service-hébergé).
 Les tests utilisent des états temporaires et des confirmations synthétiques
 explicites. Ils ne réinitialisent jamais l’équipe distante.

@@ -30,14 +30,14 @@ coupe large ou de livraison réfrigérée ne disparaît pas derrière un simple 
 | Vérification | Résultat |
 | --- | --- |
 | `npm run typecheck` | Réussi |
-| `npm test` | **1 094 / 1 094 tests, 63 fichiers** |
+| `npm test` | **1 129 / 1 129 tests, 66 fichiers** |
 | `npm run api:test` | **20 / 20 tests**, dont transport TCP local et redirections |
 | `node --test scripts/local-network-only.test.mjs` | **2 / 2 tests** |
 | `npm run build` | Réussi |
 | `git diff --check` | Réussi |
 | Recherche des credentials privés dans les fichiers destinés à Git | Aucune fuite trouvée |
 
-Total : **1 116 tests réussis**. Les suites API sont incluses dans les 1 094
+Total : **1 151 tests réussis**. Les suites API sont incluses dans les 1 129
 et ne sont pas additionnées une deuxième fois. Le détail reproductible des
 **2 318 requêtes de protocole**, 25 runs / 225 achats, et dix parcours du moteur
 supplémentaires / 90 achats est dans [la matrice API](18_API_TEST_MATRIX.md) et
@@ -64,17 +64,38 @@ Viseca ni l’identité d’un vrai client.
 
 ## Contrôle du service hébergé
 
-Requêtes réelles exécutées le 19 septembre 2026 à 07:22 UTC :
+L’essai initial à 07:22 UTC ciblait une ancienne adresse Azure et recevait 401.
+Après fourniture de la bonne origine Railway, **la même clé est valide**. Les
+six lectures (`healthz`, bootstrap, références, CSV historique, autorisations,
+événements) répondent 200. Les références correspondent au pack local `saw26`,
+y compris les 4 701 lignes historiques.
 
-| Route | Résultat |
-| --- | --- |
-| `GET /healthz` | **200**, service `saw26-sandbox`, API `0.1.0`, pack `saw26` |
-| `GET /v1/bootstrap` avec la clé configurée | **401 unauthorized** |
+Les parcours suivants exécutent les routes wallet et le moteur local avec le
+transport HTTPS réel vers `https://leash-api-production.up.railway.app`. Le
+décodage IA est désactivé pour rendre les fixtures reproductibles; les réponses
+humaines sont des actions synthétiques explicites.
 
-La clé disponible est refusée. Aucun mandat/run distant n’a été créé et aucun
-reset d’équipe n’a été exécuté. La validation de `/resolve` ci-dessus est donc
-celle du simulateur local. La compatibilité hébergée devra être vérifiée avec
-une clé valide; elle n’est pas annoncée comme acquise.
+| Scénario | Achats | Approuvés | Refusés | Total accepté CHF |
+| --- | ---: | ---: | ---: | ---: |
+| SCEN0000 | 1 | 1 | 0 | 20.00 |
+| SCEN0001 | 10 | 5 | 5 | 387.50 |
+| SCEN0002 | 12 | 1 | 11 | 165.00 |
+| SCEN0003 | 11 | 5 | 6 | 841.05 |
+| SCEN0004 | 11 | 1 | 10 | 289.00 |
+
+**45 achats, 50 contrôles par achat, aucune réservation restante.** SCEN0003
+réalise six `/resolve` réels HTTP 200 : une approbation explicite et cinq refus.
+La répétition identique renvoie 200 avec `idempotent_replay: true`; une réponse
+contradictoire renvoie 409 `already_resolved`, sans inverser l’approbation.
+
+Cette campagne a corrigé trois écarts de contrat : `awaiting_customer` signifie
+attente humaine, `timed_out` est un refus final, et `/resolve` refuse le champ
+`engine_version` qui reste valide sur `/decision`. Les deux essais de découverte
+ont expiré pendant le diagnostic; ils ne sont pas comptés parmi les cinq succès.
+Le premier journal a ensuite été repris : six expirations réconciliées, aucune
+réservation, **zéro nouveau POST**. Aucun reset d’équipe n’a été effectué.
+
+[Résultats machine de la campagne Railway](test-results/railway-api-2026-09-19.json).
 
 Les credentials restent uniquement dans `.env.local` et ne sont ni copiés dans
 ce rapport, ni envoyés au navigateur, ni versionnés. Voir [le guide de démarrage](../README_API.md).

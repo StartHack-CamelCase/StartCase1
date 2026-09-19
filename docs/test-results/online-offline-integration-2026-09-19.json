@@ -1,9 +1,9 @@
 {
   "date": "2026-09-19",
   "application_tests": {
-    "passed": 1094,
+    "passed": 1129,
     "failed": 0,
-    "files": 63
+    "files": 66
   },
   "http_cli_tests": {
     "passed": 20,
@@ -13,14 +13,23 @@
     "passed": 2,
     "failed": 0
   },
-  "total_tests_passed": 1116,
+  "total_tests_passed": 1151,
   "typecheck": "passed",
   "build": "passed",
   "remote": {
+    "origin": "https://leash-api-production.up.railway.app",
     "healthz": 200,
-    "bootstrap": 401,
-    "authenticated_scenarios": "blocked_invalid_team_credential",
-    "remote_mutations": 0
+    "bootstrap": 200,
+    "authenticated_scenarios": "passed",
+    "scenarios": 5,
+    "purchases": 45,
+    "human_resolutions": 6,
+    "human_approvals": 1,
+    "human_declines": 5,
+    "identical_resolve_replay": 200,
+    "conflicting_resolve_replay": 409,
+    "details": "railway-api-2026-09-19.json",
+    "initial_401_cause": "wrong_azure_origin"
   },
   "browser_local_api": {
     "scen0000": {

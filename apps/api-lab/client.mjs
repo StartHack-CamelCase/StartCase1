@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { readFileSync } from 'node:fs';
 
-export const DEFAULT_BASE_URL = 'https://saw26api.ashyground-364e1d07.switzerlandnorth.azurecontainerapps.io';
+export const DEFAULT_BASE_URL = 'https://leash-api-production.up.railway.app';
 export const READ_PATHS = Object.freeze([
   '/v1/bootstrap',
   '/v1/reference-data',

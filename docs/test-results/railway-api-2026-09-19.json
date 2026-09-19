@@ -1,0 +1,464 @@
+{
+  "date": "2026-09-19",
+  "origin": "https://leash-api-production.up.railway.app",
+  "api_version": "0.1.0",
+  "pack_version": "saw26",
+  "authentication": "existing_private_team_key_valid",
+  "initial_diagnosis": "old_azure_origin_returned_401_not_evidence_of_invalid_railway_key",
+  "read_checks": {
+    "/healthz": 200,
+    "/v1/bootstrap": 200,
+    "/v1/reference-data": 200,
+    "/v1/reference-data/authorization-history.csv": 200,
+    "/v1/authorizations": 200,
+    "/v1/events?since=0": 200
+  },
+  "reference_parity": {
+    "matches_local_pack": true,
+    "history_csv_rows": 4701
+  },
+  "test_method": "Local wallet HTTP handlers and decision engine with real Railway HTTPS transport; explicit synthetic human fixtures; AI decoder disabled for reproducibility. These are API tests, not hosted browser tests.",
+  "scenarios": [
+    {
+      "scenario": "SCEN0000",
+      "run_id": "LIVE_SESSION_9efe40ff-56a8-47e2-9bc3-e73ab8102ac1",
+      "platform_run_id": "RUN_cb9d540b1fca010f",
+      "status": "completed",
+      "purchases": 1,
+      "approved_chf": "20.00",
+      "human_resolutions": 0,
+      "decisions": [
+        {
+          "id": "LA_5dbfb99285185bd9",
+          "amount_chf": "20",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        }
+      ]
+    },
+    {
+      "scenario": "SCEN0001",
+      "run_id": "LIVE_SESSION_26801238-d25c-4281-8532-7d6808b95ffe",
+      "platform_run_id": "RUN_727f4d5f57ff23c5",
+      "status": "completed",
+      "purchases": 10,
+      "approved_chf": "387.50",
+      "human_resolutions": 0,
+      "decisions": [
+        {
+          "id": "LA_816c178488f4aa3d",
+          "amount_chf": "44.5",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_d4c417756f609a74",
+          "amount_chf": "120",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_3c18fccf46602512",
+          "amount_chf": "126",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_8a3b85b2e4b25072",
+          "amount_chf": "70",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_c0caff8d9693080f",
+          "amount_chf": "65",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_bbaeb7ed78842527",
+          "amount_chf": "62",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_71bacc934a54bfe2",
+          "amount_chf": "65.5",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_d1143b7f61169ae2",
+          "amount_chf": "24",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_d0a44106359cb92a",
+          "amount_chf": "138",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_06d6d40682d118f1",
+          "amount_chf": "88",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        }
+      ]
+    },
+    {
+      "scenario": "SCEN0002",
+      "run_id": "LIVE_SESSION_a00e17c3-f107-4f1d-91c3-85a0a536ed35",
+      "platform_run_id": "RUN_7c79f1a65912fea0",
+      "status": "completed",
+      "purchases": 12,
+      "approved_chf": "165.00",
+      "human_resolutions": 0,
+      "decisions": [
+        {
+          "id": "LA_e2d3419b4179b8f0",
+          "amount_chf": "165",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_5f886a3602ffa007",
+          "amount_chf": "155",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_9d695fc4e0abf388",
+          "amount_chf": "145",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_cc7bcb369b6ee24d",
+          "amount_chf": "158",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_1d3fb19997552159",
+          "amount_chf": "175",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_14b80d964f92e706",
+          "amount_chf": "180",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_95bd881cc87a6f49",
+          "amount_chf": "194",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_b349e2945155e3bc",
+          "amount_chf": "168",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_f5fc8cb36e42f317",
+          "amount_chf": "120",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_cba965ec050351d0",
+          "amount_chf": "215",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_81f042cdf830ea1c",
+          "amount_chf": "189",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_a4d5ec9873075a27",
+          "amount_chf": "179",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        }
+      ]
+    },
+    {
+      "scenario": "SCEN0003",
+      "run_id": "LIVE_SESSION_1fcbfc06-1cce-457a-bdb9-70ed2eabef0b",
+      "platform_run_id": "RUN_5cdc258cd86a3830",
+      "status": "completed",
+      "purchases": 11,
+      "approved_chf": "841.05",
+      "human_resolutions": 6,
+      "decisions": [
+        {
+          "id": "LA_dcc5776022535549",
+          "amount_chf": "145",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_a5460debca52c5c8",
+          "amount_chf": "189.05",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_1a69eb043327416d",
+          "amount_chf": "165",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_6595b09ebb3f7b40",
+          "amount_chf": "232",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_de3cf15fba516a9d",
+          "amount_chf": "245",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_e1984997289d5443",
+          "amount_chf": "245.28",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_47be7d9d16bbbf13",
+          "amount_chf": "248",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_c43badc9372d6510",
+          "amount_chf": "95",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_4004ed239550741d",
+          "amount_chf": "247",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_5c9b23d8795dee93",
+          "amount_chf": "138",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_34a8b96b447f71d9",
+          "amount_chf": "268",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        }
+      ]
+    },
+    {
+      "scenario": "SCEN0004",
+      "run_id": "LIVE_SESSION_c6528ea4-fcd8-45b6-acc8-adb0a4d4f004",
+      "platform_run_id": "RUN_d3f7baf3a3b70ae1",
+      "status": "completed",
+      "purchases": 11,
+      "approved_chf": "289.00",
+      "human_resolutions": 0,
+      "decisions": [
+        {
+          "id": "LA_9c90ed1bb877116f",
+          "amount_chf": "289",
+          "decision": "approve",
+          "state": "approved",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_d0f8ad6370295c9a",
+          "amount_chf": "289",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_affa80366d71b054",
+          "amount_chf": "520",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_e563d07762cba014",
+          "amount_chf": "391.5",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_39314524a2b57698",
+          "amount_chf": "340",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_571ceee19239424f",
+          "amount_chf": "299",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_fa0e78a713cb58fa",
+          "amount_chf": "459",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_3b58579f0493ace0",
+          "amount_chf": "350",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_71fbed6e1cb1dc42",
+          "amount_chf": "195",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_a51504355dca7a76",
+          "amount_chf": "310",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        },
+        {
+          "id": "LA_c1ce80309838cb01",
+          "amount_chf": "399.9",
+          "decision": "deny",
+          "state": "declined",
+          "platform": "accepted"
+        }
+      ]
+    }
+  ],
+  "total_purchases": 45,
+  "approved_purchases": 13,
+  "declined_purchases": 32,
+  "human_resolutions": [
+    {
+      "http": 200,
+      "decision": "approve",
+      "status": "approved",
+      "is_final": true
+    },
+    {
+      "http": 200,
+      "decision": "decline",
+      "status": "declined",
+      "is_final": true
+    },
+    {
+      "http": 200,
+      "decision": "decline",
+      "status": "declined",
+      "is_final": true
+    },
+    {
+      "http": 200,
+      "decision": "decline",
+      "status": "declined",
+      "is_final": true
+    },
+    {
+      "http": 200,
+      "decision": "decline",
+      "status": "declined",
+      "is_final": true
+    },
+    {
+      "http": 200,
+      "decision": "decline",
+      "status": "declined",
+      "is_final": true
+    }
+  ],
+  "resolve_replays": [
+    {
+      "kind": "identical_replay",
+      "http": 200,
+      "status": "approved",
+      "is_final": true,
+      "idempotent_replay": true,
+      "error": null
+    },
+    {
+      "kind": "conflicting_replay",
+      "http": 409,
+      "error": {
+        "code": "already_resolved",
+        "message": "The customer already answered 'approve'"
+      }
+    }
+  ],
+  "expired_trial_recovery": {
+    "status": "completed",
+    "purchases": 11,
+    "approved_chf": "676.05",
+    "reservations": 0,
+    "posts": 0
+  },
+  "discovery_trials": {
+    "additional_runs": 2,
+    "notes": "Initial SCEN0003 trials exposed awaiting_customer, unsupported engine_version, and timed_out; human/decision deadlines expired during fixes. Final successful SCEN0003 used a new isolated journal. No team reset performed."
+  },
+  "secret_storage": "private .env.local only; no credential in this report"
+}

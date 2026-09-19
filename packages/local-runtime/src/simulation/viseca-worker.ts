@@ -116,7 +116,7 @@ export class VisecaWorker {
    const previous_intent=structuredClone(entry.intent);
    entry.intent={id:randomUUID(),operation:'resolve',decision,at:this.iso(),actor_id:actor.actor_id,consent_hash};
    entry.decision=decision;entry.state='intended';entry.reserved=true;this.record(entry,'human_intent',entry.intent);await this.outbox.save();
-   return {id,intent_id:entry.intent.id,decision,deadline,previous_intent,body:{evidence:[{type:'human_review',actor:actor.actor_id},...humanEvidence],engine_version:'mcg-1.0.0'}};
+   return {id,intent_id:entry.intent.id,decision,deadline,previous_intent,body:{evidence:[{type:'human_review',actor:actor.actor_id},...humanEvidence]}};
   });
   try{
    if(this.now()>=pending.deadline)throw Error('human_confirmation_expired');
@@ -227,7 +227,11 @@ function acceptedDecision(body:Record<string,unknown>):LiveDecision|undefined{
  if(body['accepted']===false)return undefined;
  if(status==='approved')return 'approve';
  if(['declined','cancelled','expired'].includes(status))return 'decline';
+ if(status==='timed_out')return body['is_final']!==false&&['','step_up','decline'].includes(decision)?'decline':undefined;
  if(['step_up','awaiting_human'].includes(status))return 'step_up';
+ // The hosted Railway API names this non-final state awaiting_customer.
+ // A conflicting final marker or decision is not proof of an accepted step-up.
+ if(status==='awaiting_customer')return (decision===''||decision==='step_up')&&body['is_final']!==true?'step_up':undefined;
  if((status==='accepted'||body['accepted']===true)&&['approve','decline','step_up'].includes(decision))return decision as LiveDecision;
  return undefined;
 }

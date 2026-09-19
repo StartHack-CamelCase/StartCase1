@@ -27,7 +27,7 @@
     "api:demo:start": "node --import ./scripts/local-network-only.mjs ./dist/apps/api-mock/src/demo.js",
     "api:mock": "node --import ./scripts/local-network-only.mjs --import tsx ./apps/api-mock/src/server.ts",
     "api:remote": "node ./scripts/build.mjs && node ./scripts/start-api-remote.mjs",
-    "api:check": "node --test ./scripts/local-network-only.test.mjs && node ./node_modules/vitest/vitest.mjs run tests/api-contract-matrix.test.ts tests/mock-api.test.ts tests/api-readiness.test.ts tests/backend-merge-regressions.test.ts tests/viseca.test.ts tests/viseca-worker.test.ts tests/live-session-service.test.ts tests/live-recovery-regressions.test.ts tests/live-audit-regressions.test.ts tests/live-resume-pagination.test.ts tests/wallet-reply-idempotency.test.ts tests/data-mode-api.test.ts",
+    "api:check": "node --test ./scripts/local-network-only.test.mjs && node ./node_modules/vitest/vitest.mjs run tests/api-contract-matrix.test.ts tests/mock-api.test.ts tests/api-readiness.test.ts tests/backend-merge-regressions.test.ts tests/viseca.test.ts tests/viseca-worker.test.ts tests/live-session-service.test.ts tests/live-recovery-regressions.test.ts tests/live-audit-regressions.test.ts tests/live-resume-pagination.test.ts tests/wallet-reply-idempotency.test.ts tests/data-mode-api.test.ts tests/railway-compatibility.test.ts tests/railway-mock-contract.test.ts",
     "api:local": "node --import ./scripts/local-network-only.mjs ./scripts/api-local.mjs"
   },
   "dependencies": {

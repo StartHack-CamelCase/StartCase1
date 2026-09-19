@@ -91,7 +91,7 @@ pnpm offline:inspect-all
 
 ## Périmètre actuel
 
-L’inspection historique est conservée. Un mode **simulation locale M/C/G** ajoute les 50 contrôles, une configuration relue et confirmée, les questions humaines typées, les locks et un registre SQLite transactionnel. Le worker **Viseca** est distinct ; il utilise le même moteur et compte uniquement les approbations acceptées par la plateforme. Le parcours complet est validé sur le simulateur HTTP local; la recette hébergée reste bloquée tant que la clé d’équipe reçoit HTTP 401. Voir [le guide d’usage](docs/12_USAGE_SIMULATION_ET_VISECA.md).
+L’inspection historique est conservée. Un mode **simulation locale M/C/G** ajoute les 50 contrôles, une configuration relue et confirmée, les questions humaines typées, les locks et un registre SQLite transactionnel. Le worker **Viseca** est distinct ; il utilise le même moteur et compte uniquement les approbations acceptées par la plateforme. Le parcours complet est validé sur le simulateur HTTP local et sur l’API Railway : cinq scénarios, 45 achats et six confirmations/refus via `/resolve`. Voir [le guide d’usage](docs/12_USAGE_SIMULATION_ET_VISECA.md).
 
 ## Décoder une instruction
 
