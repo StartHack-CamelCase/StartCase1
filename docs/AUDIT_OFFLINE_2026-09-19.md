@@ -2,7 +2,7 @@
 
 ## Résultat
 
-Les cinq scénarios officiels et leurs 45 propositions ont été testés sans appel aux services externes. Huit défauts ont été reproduits et corrigés. La validation finale a passé **589 tests applicatifs dans 37 fichiers**, ainsi que **19 tests du client API** utilisant des transports simulés ou des serveurs HTTP locaux.
+Les cinq scénarios officiels et leurs 45 propositions ont été testés sans appel aux services externes. Huit défauts ont été reproduits et corrigés. La suite globale exécutée pendant cette recette a passé 589 tests dans 37 fichiers ; la validation commune suivante, exécutée par la tâche interface et vérifiée dans `/tmp/viseca-cards-final-tests.log`, passe **590 tests applicatifs dans 38 fichiers**. Un dernier test indépendant de consentement après révocation et redémarrage passe également. Les **19 tests du client API** passent avec des transports simulés ou des serveurs HTTP locaux.
 
 TypeScript, le build de production et la vérification des 18 empreintes du pack passent. Les 45 événements canoniques sont valides. Les tests utilisent des dossiers temporaires et n'écrivent pas dans l'historique utilisateur. Le serveur principal sur le port 3210 n'a pas été redémarré par cette recette.
 
@@ -19,11 +19,11 @@ TypeScript, le build de production et la vérification des 18 empreintes du pack
 | Réponse humaine du mode hébergé envoyée à une simulation locale : erreur 500 | Conflit de mode explicite, statut 409 | `offline-api-audit.test.ts` |
 | Panne d'écriture pendant une révocation : simulation révoquée alors que le mandat reste actif sur disque | Persistance du mandat avant mise à jour des simulations ; reprise idempotente | `offline-api-audit.test.ts` |
 
-Les interruptions de révocation ont été injectées aux deux étapes. Après une panne survenant après la sauvegarde du mandat, le contrôle du mandat bloque de nouvelles approbations, y compris après redémarrage ; la répétition de la demande termine la mise à jour des simulations.
+Les interruptions de révocation ont été injectées aux deux étapes. Après une panne survenant après la sauvegarde du mandat, le contrôle du mandat bloque de nouvelles approbations, y compris après redémarrage et soumission d'un consentement ouvert avant la panne ; la répétition de la demande termine la mise à jour des simulations. Dans cet intervalle de récupération, une lecture peut encore montrer l'ancien statut de simulation, mais les opérations vérifient le mandat révoqué et ne peuvent pas approuver un nouvel achat.
 
 ## Couverture ajoutée
 
-- **86 tests moteur** : 45 propositions × 8 configurations, soit 360 évaluations complètes des 50 filtres ; centimes, FX et arrondi, incohérences de total, références absentes, restrictions vides, limites à zéro, réservations, budget glissant, journées/mois de Zurich et changement d'heure.
+- **87 tests moteur et revue indépendante** : 45 propositions × 8 configurations, soit 360 évaluations complètes des 50 filtres ; centimes, FX et arrondi, incohérences de total, références absentes, restrictions vides, limites à zéro, réservations, budget glissant, journées/mois de Zurich, changement d'heure et consentement après une révocation interrompue.
 - **30 tests API et persistance** : corps invalides, origines, CSRF, autre client, concurrence, idempotence, mauvais mode, confirmation interrompue, redémarrage, corruption, révocation et erreurs de sauvegarde.
 - **70 tests de scénarios** : cinq scénarios × quatre comportements humains (rejeter les demandes, confirmer seulement les risques, laisser expirer, révoquer avec demandes en attente), plus révocation avant le premier achat et 45 offres évaluées individuellement avec un registre de dépenses vide. La matrice représente **225 propositions testées, 233 évaluations et 11 650 contrôles de filtres**, avec zéro appel `fetch` ou décodeur. Elle vérifie les identifiants approuvés, les montants CHF, les réservations et les résultats après réouverture de SQLite.
 
@@ -41,7 +41,7 @@ Une instance isolée sur `127.0.0.1:3227` a été utilisée avec décodeur désa
 4. L'achat de CHF 232 est rejeté. Un rechargement immédiat interrompt la réception de la réponse : « Retry saved request » retrouve le résultat, sans double décision ni hausse du total.
 5. Quatre autres demandes expirent sans approbation. La réévaluation d'une demande expirée ouvre une nouvelle fenêtre de 120 secondes, avec les mêmes exigences humaines.
 6. La révocation avec une demande en attente retire les contrôles actifs et conserve **CHF 841.05 approuvés**, avec zéro demande restante.
-7. Affichage vérifié à une largeur effective de 384 pixels : aucun débordement horizontal du document. Aucune erreur ni alerte dans la console du navigateur. La taille temporaire et l'onglet de test ont été rétablis/fermés.
+7. Affichage vérifié à une largeur effective de 384 pixels : aucun débordement horizontal du document. Aucune erreur ni alerte dans la console du navigateur. La taille temporaire et l'onglet de test ont été rétablis/fermés. Le serveur de test a été arrêté et son stockage temporaire supprimé.
 
 ## Commandes et limites
 
