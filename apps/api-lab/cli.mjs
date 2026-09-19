@@ -93,6 +93,7 @@ export async function main(args = process.argv.slice(2)) {
     console.log(JSON.stringify({ base_url: config.baseUrl, team_token: config.apiKey && !/^<.*>$/.test(config.apiKey.trim()) ? 'présent (masqué)' : 'manquant', env_file: resolve(config.cwd, '.env.local'), reports: resolve(config.cwd, '.viseca/api-lab') }, null, 2));
     return;
   }
+  if (config.mode === 'disabled') throw new Error('API distante désactivée. Utilisez npm run api:local -- reads avec le simulateur local démarré.');
   let method = 'GET';
   let paths;
   let options;

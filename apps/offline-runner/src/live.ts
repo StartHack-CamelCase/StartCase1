@@ -1,3 +1,4 @@
+import { createLiveRunDurably } from '../../../packages/local-runtime/src/services/live-run-creation.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { loadEnvFile } from 'node:process';
@@ -19,7 +20,7 @@ async function main():Promise<void>{
  const binding=validateLiveBinding({...loaded,history_hash:loaded.history_hash??hash(pack.history),pack_version:loaded.pack_version??pack.pack_version},pack);
  const outbox=new VisecaOutbox(resolve(loaded.outbox??'.viseca/live-outbox.sqlite'));await outbox.load();const worker=new VisecaWorker(client,outbox);
  let runId=option(args,'--run-id');
- if(command==='create-run'){if(outbox.value.run_id)throw Error('Utilisez une nouvelle outbox pour un nouveau run.');const result=await client.createRun({scenario_id:binding.scenario_id,mandate_id:binding.live_mandate_id});const data=(result['data']??result) as Record<string,unknown>;runId=String(data['run_id']??'');if(!runId)throw Error('Réponse sans run_id.');console.log(`Run créé : ${runId}`);}
+ if(command==='create-run'){runId=await createLiveRunDurably(client,outbox,binding);console.log(`Run créé ou réconcilié : ${runId}`);}
  if(!runId)throw Error('--run-id requis');
  if(command==='status'){console.log(JSON.stringify(await client.getRun(runId),null,2));outbox.close();return;}
  if(command!=='follow'&&command!=='create-run')throw Error('Commandes : prepare, create-run, follow, status');

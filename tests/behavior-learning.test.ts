@@ -4,7 +4,7 @@ import { assess, stampCommitted } from '../packages/local-runtime/src/simulation
 import { offerHash } from '../packages/local-runtime/src/simulation/common.js';
 import { buildBehaviorProfile, habitContext } from '../packages/local-runtime/src/learning/behavior-profile.js';
 import { localHabitObservations, liveHabitObservations, safeBehaviorProfile } from '../packages/local-runtime/src/learning/learned-habits.js';
-import type { BehaviorObservation } from '../packages/contracts/src/behavior.js';
+import type { BehaviorControlEvent, BehaviorObservation } from '../packages/contracts/src/behavior.js';
 import type { LiveEntry } from '../packages/local-runtime/src/simulation/viseca-worker.js';
 
 function context(day=24,observations:BehaviorObservation[]=[]){
@@ -84,6 +84,30 @@ describe('confirmed habit learning through the decision engine',()=>{
     c.behavior_profile=safeBehaviorProfile(observations,{customerId:c.run.customer_id,scope:'local',asOf:c.event.authorization.timestamp,timezone:c.config.parameters.timezone});
     const a=assess(c);expect(a.behavior_learning?.profile.warning).toContain('Standard checks');
     expect(a.results.find(r=>r.filter_id==='C15')!.outcome).toBe('needs_review');
+  });
+  it('keeps a suspended context visible and does not collect a new positive confirmation',()=>{
+    const c=context(24),observations=learned().map((o,i)=>({...o,sequence:i+1}));
+    const control:BehaviorControlEvent={sequence:4,customer_id:c.run.customer_id,scope:'local',filter_id:'C15',context_key:c.event.authorization.customer_device_id!,action:'suspend',at:c.now,actor_id:'customer'};
+    c.behavior_profile=buildBehaviorProfile(observations,{customerId:c.run.customer_id,scope:'local',asOf:c.event.authorization.timestamp,timezone:c.config.parameters.timezone,controls:[control],availableThroughSequence:4});
+    const initial=assess(c);expect(initial.behavior_learning?.profile.habits[0]!.status).toBe('suspended');
+    expect(initial.behavior_learning?.applied_filter_ids).toEqual([]);
+    const confirmed=confirmDevice(c);
+    expect(confirmed.final.execution_state).toBe('approved');
+    expect(confirmed.final.behavior_learning?.confirmations).toEqual([]);
+    expect(confirmed.observations).toEqual([]);
+  });
+  it('preserves a suspension on evidence failure and pauses all optional learning for that check',()=>{
+    const c=context(),rows=learned().map((o,i)=>({...o,sequence:i+1}));
+    const control:BehaviorControlEvent={sequence:4,customer_id:c.run.customer_id,scope:'local',filter_id:'C15',context_key:c.event.authorization.customer_device_id!,action:'suspend',at:c.now,actor_id:'customer'};
+    c.behavior_profile=safeBehaviorProfile([...rows,{...rows[0]!,context_key:'conflict'}],{customerId:c.run.customer_id,scope:'local',asOf:c.event.authorization.timestamp,timezone:c.config.parameters.timezone,controls:[control]});
+    expect(c.behavior_profile.habits[0]!.status).toBe('suspended');
+    expect(c.behavior_profile.warning).toBeDefined();
+    expect(confirmDevice(c).observations).toEqual([]);
+    c.answers=[];c.run.purchases=[];
+    c.behavior_profile=safeBehaviorProfile(rows,{customerId:c.run.customer_id,scope:'local',asOf:c.event.authorization.timestamp,timezone:c.config.parameters.timezone,controls:[{...control,sequence:-1}]});
+    expect(c.behavior_profile.warning).toBeDefined();
+    expect(assess(c).behavior_learning?.applied_filter_ids).toEqual([]);
+    expect(confirmDevice(c).observations).toEqual([]);
   });
   it('requires a final platform acceptance after an attributed human resolution',()=>{
     const c=context(),observation={...learned()[0]!,scope:'live' as const,authorization_id:c.event.authorization.authorization_id};

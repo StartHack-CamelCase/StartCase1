@@ -23,6 +23,7 @@ export async function createLocalApp(options: LocalAppOptions = {}): Promise<Fas
     logger: options.logger ?? false,
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false, useDefaults: false } },
   });
+  if (options.liveOptions?.environment === 'mock') app.addHook('onSend', async (_request, reply, payload) => { reply.header('Content-Security-Policy', "default-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'"); return payload; });
   const rootDir = options.rootDir ?? process.cwd();
   const webDir = options.webDir ?? resolve(rootDir, "dist/apps/local-web/web");
   let runtime: LocalRuntime | null = null;
@@ -92,6 +93,7 @@ export async function createLocalApp(options: LocalAppOptions = {}): Promise<Fas
     }
   });
 
+  const humanChannel = createHumanChannel();
   registerApiRoutes(
     app,
     () => {
@@ -101,9 +103,9 @@ export async function createLocalApp(options: LocalAppOptions = {}): Promise<Fas
       return runtime;
     },
     new IdempotencyStore(),
+    humanChannel,
   );
 
-  const humanChannel = createHumanChannel();
   const availableRuntime = () => {
     if (runtime === null) throw new AppError(503, "runtime_unavailable", "Le stockage est indisponible.");
     return runtime;
@@ -122,6 +124,7 @@ export async function createLocalApp(options: LocalAppOptions = {}): Promise<Fas
   app.get("/simulations/:runId", serveIndex);
   app.get("/wallet", serveIndex);
   app.get("/wallet/new", serveIndex);
+  app.get("/wallet/profiles", serveIndex);
   app.get("/wallet/runs/:runId", serveIndex);
 
   app.setNotFoundHandler(async (request, reply) => {

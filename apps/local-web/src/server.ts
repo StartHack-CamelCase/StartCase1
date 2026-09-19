@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
+import { liveConnectionFromEnv } from "../../../packages/local-runtime/src/services/live-configuration.js";
 import { createLocalApp } from "./app.js";
 
 export async function startServer(): Promise<void> {
@@ -8,7 +9,12 @@ export async function startServer(): Promise<void> {
   catch (error) {
     if (!(error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw new Error("Could not load the server configuration.");
   }
-  const app = await createLocalApp({ logger: true });
+  const app = await createLocalApp({
+    logger: true,
+    liveOptions: liveConnectionFromEnv(),
+    ...(process.env["LOCAL_STATE_DIR"] ? { stateDir: resolve(process.env["LOCAL_STATE_DIR"]) } : {}),
+    ...(process.env["LOCAL_OUTPUT_DIR"] ? { outputDir: resolve(process.env["LOCAL_OUTPUT_DIR"]) } : {}),
+  });
   const rawPort = process.env["PORT"] ?? "3210";
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {

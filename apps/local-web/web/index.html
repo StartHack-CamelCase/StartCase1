@@ -11,6 +11,7 @@
     <meta name="theme-color" content="#102533" />
     <title>Wallet control · Viseca</title>
     <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/behavior-profiles.css" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -31,10 +32,11 @@
 
         <nav class="primary-nav" aria-label="Main navigation">
           <a id="nav-scenarios" href="/">Wallet</a>
-          <span class="offline-pill">
-            <span class="offline-pill__dot" aria-hidden="true"></span>
-            Local simulation
-          </span>
+          <a id="nav-profiles" href="/wallet/profiles">Profiles</a>
+          <div class="data-mode-control">
+            <div class="data-mode-switch-row"><span id="offline-mode-label">Offline</span><button type="button" id="data-mode-switch" class="data-mode-switch" role="switch" aria-checked="false" aria-label="Use online API data" aria-describedby="data-mode-status"><span class="data-mode-switch__thumb" aria-hidden="true"></span></button><span id="online-mode-label">Online</span></div>
+            <span id="data-mode-status" class="data-mode-status" role="status">Offline · local data</span>
+          </div>
         </nav>
       </div>
     </header>
@@ -47,7 +49,7 @@
 
     <footer class="app-footer">
       <div class="app-footer__inner">
-        <p>Synthetic data · Local execution · No real payments</p>
+        <p id="environment-footer">Synthetic data · Offline local simulation · No real payments</p>
       </div>
     </footer>
 

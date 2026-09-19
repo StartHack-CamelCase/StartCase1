@@ -1,0 +1,317 @@
+{
+  "date": "2026-09-19",
+  "scope": "Local Fastify injection; no external service calls",
+  "protocol": {
+    "metrics": {
+      "requests": 2318,
+      "scenarios_completed": 25,
+      "purchases_checked": 225,
+      "automated_answers": 290,
+      "human_answers": 142,
+      "schema_checks": 332,
+      "statuses": {
+        "200": 1845,
+        "201": 272,
+        "204": 25,
+        "400": 83,
+        "401": 48,
+        "404": 15,
+        "409": 30
+      }
+    },
+    "scenarios": [
+      {
+        "scenario": "SCEN0000",
+        "strategy": "approve",
+        "purchases": 1,
+        "approved": 1,
+        "declined": 0,
+        "approved_chf": "20.00"
+      },
+      {
+        "scenario": "SCEN0000",
+        "strategy": "decline",
+        "purchases": 1,
+        "approved": 0,
+        "declined": 1,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0000",
+        "strategy": "human_approve",
+        "purchases": 1,
+        "approved": 1,
+        "declined": 0,
+        "approved_chf": "20.00"
+      },
+      {
+        "scenario": "SCEN0000",
+        "strategy": "human_decline",
+        "purchases": 1,
+        "approved": 0,
+        "declined": 1,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0000",
+        "strategy": "mixed",
+        "purchases": 1,
+        "approved": 1,
+        "declined": 0,
+        "approved_chf": "20.00"
+      },
+      {
+        "scenario": "SCEN0001",
+        "strategy": "approve",
+        "purchases": 10,
+        "approved": 10,
+        "declined": 0,
+        "approved_chf": "803.00"
+      },
+      {
+        "scenario": "SCEN0001",
+        "strategy": "decline",
+        "purchases": 10,
+        "approved": 0,
+        "declined": 10,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0001",
+        "strategy": "human_approve",
+        "purchases": 10,
+        "approved": 10,
+        "declined": 0,
+        "approved_chf": "803.00"
+      },
+      {
+        "scenario": "SCEN0001",
+        "strategy": "human_decline",
+        "purchases": 10,
+        "approved": 0,
+        "declined": 10,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0001",
+        "strategy": "mixed",
+        "purchases": 10,
+        "approved": 5,
+        "declined": 5,
+        "approved_chf": "439.00"
+      },
+      {
+        "scenario": "SCEN0002",
+        "strategy": "approve",
+        "purchases": 12,
+        "approved": 12,
+        "declined": 0,
+        "approved_chf": "2043.00"
+      },
+      {
+        "scenario": "SCEN0002",
+        "strategy": "decline",
+        "purchases": 12,
+        "approved": 0,
+        "declined": 12,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0002",
+        "strategy": "human_approve",
+        "purchases": 12,
+        "approved": 12,
+        "declined": 0,
+        "approved_chf": "2043.00"
+      },
+      {
+        "scenario": "SCEN0002",
+        "strategy": "human_decline",
+        "purchases": 12,
+        "approved": 0,
+        "declined": 12,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0002",
+        "strategy": "mixed",
+        "purchases": 12,
+        "approved": 6,
+        "declined": 6,
+        "approved_chf": "988.00"
+      },
+      {
+        "scenario": "SCEN0003",
+        "strategy": "approve",
+        "purchases": 11,
+        "approved": 11,
+        "declined": 0,
+        "approved_chf": "2217.33"
+      },
+      {
+        "scenario": "SCEN0003",
+        "strategy": "decline",
+        "purchases": 11,
+        "approved": 0,
+        "declined": 11,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0003",
+        "strategy": "human_approve",
+        "purchases": 11,
+        "approved": 11,
+        "declined": 0,
+        "approved_chf": "2217.33"
+      },
+      {
+        "scenario": "SCEN0003",
+        "strategy": "human_decline",
+        "purchases": 11,
+        "approved": 0,
+        "declined": 11,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0003",
+        "strategy": "mixed",
+        "purchases": 11,
+        "approved": 6,
+        "declined": 5,
+        "approved_chf": "1318.00"
+      },
+      {
+        "scenario": "SCEN0004",
+        "strategy": "approve",
+        "purchases": 11,
+        "approved": 11,
+        "declined": 0,
+        "approved_chf": "3842.40"
+      },
+      {
+        "scenario": "SCEN0004",
+        "strategy": "decline",
+        "purchases": 11,
+        "approved": 0,
+        "declined": 11,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0004",
+        "strategy": "human_approve",
+        "purchases": 11,
+        "approved": 11,
+        "declined": 0,
+        "approved_chf": "3842.40"
+      },
+      {
+        "scenario": "SCEN0004",
+        "strategy": "human_decline",
+        "purchases": 11,
+        "approved": 0,
+        "declined": 11,
+        "approved_chf": "0.00"
+      },
+      {
+        "scenario": "SCEN0004",
+        "strategy": "mixed",
+        "purchases": 11,
+        "approved": 6,
+        "declined": 5,
+        "approved_chf": "2202.90"
+      }
+    ]
+  },
+  "engine_scenarios": [
+    {
+      "scenario": "SCEN0000",
+      "human_choice": "approve",
+      "purchases": 1,
+      "approved": 1,
+      "declined": 0,
+      "resolved": 0,
+      "approved_chf": "20.00"
+    },
+    {
+      "scenario": "SCEN0000",
+      "human_choice": "decline",
+      "purchases": 1,
+      "approved": 1,
+      "declined": 0,
+      "resolved": 0,
+      "approved_chf": "20.00"
+    },
+    {
+      "scenario": "SCEN0001",
+      "human_choice": "approve",
+      "purchases": 10,
+      "approved": 5,
+      "declined": 5,
+      "resolved": 0,
+      "approved_chf": "387.50"
+    },
+    {
+      "scenario": "SCEN0001",
+      "human_choice": "decline",
+      "purchases": 10,
+      "approved": 5,
+      "declined": 5,
+      "resolved": 0,
+      "approved_chf": "387.50"
+    },
+    {
+      "scenario": "SCEN0002",
+      "human_choice": "approve",
+      "purchases": 12,
+      "approved": 1,
+      "declined": 11,
+      "resolved": 0,
+      "approved_chf": "165.00"
+    },
+    {
+      "scenario": "SCEN0002",
+      "human_choice": "decline",
+      "purchases": 12,
+      "approved": 1,
+      "declined": 11,
+      "resolved": 0,
+      "approved_chf": "165.00"
+    },
+    {
+      "scenario": "SCEN0003",
+      "human_choice": "approve",
+      "purchases": 11,
+      "approved": 5,
+      "declined": 6,
+      "resolved": 6,
+      "approved_chf": "841.05"
+    },
+    {
+      "scenario": "SCEN0003",
+      "human_choice": "decline",
+      "purchases": 11,
+      "approved": 4,
+      "declined": 7,
+      "resolved": 6,
+      "approved_chf": "676.05"
+    },
+    {
+      "scenario": "SCEN0004",
+      "human_choice": "approve",
+      "purchases": 11,
+      "approved": 1,
+      "declined": 10,
+      "resolved": 0,
+      "approved_chf": "289.00"
+    },
+    {
+      "scenario": "SCEN0004",
+      "human_choice": "decline",
+      "purchases": 11,
+      "approved": 1,
+      "declined": 10,
+      "resolved": 0,
+      "approved_chf": "289.00"
+    }
+  ]
+}

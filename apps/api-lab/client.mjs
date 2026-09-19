@@ -72,7 +72,7 @@ export function loadConfig({ cwd = process.cwd(), env = process.env } = {}) {
   catch (error) { if (error.code !== 'ENOENT') throw new Error('Impossible de lire .env.local.'); }
   const apiKey = env.TEAM_API_KEY ?? local.TEAM_API_KEY ?? '';
   const baseUrl = normalizeBaseUrl(env.LEASH_BASE_URL ?? local.LEASH_BASE_URL ?? DEFAULT_BASE_URL);
-  return { baseUrl, apiKey, cwd };
+  return { baseUrl, apiKey, cwd, mode: env.VISECA_API_MODE ?? local.VISECA_API_MODE ?? 'remote' };
 }
 
 export async function requestApi({ baseUrl, apiKey, path, method = 'GET', body, timeoutMs = 30_000, fetchImpl = fetch }) {

@@ -52,14 +52,14 @@
 }
 
 html {
-  min-width: 320px;
+  min-width: 0;
   min-height: 100%;
   background: var(--paper);
   scroll-behavior: smooth;
 }
 
 body {
-  min-width: 320px;
+  min-width: 0;
   min-height: 100dvh;
   margin: 0;
   color: var(--ink);
@@ -2159,4 +2159,229 @@ ul.review-reasons {
   .carousel-controls button {
     transition: none;
   }
+}
+
+/* One centered layout scale across the wallet, including narrow app panels. */
+.app-header__inner,
+.main-shell,
+.app-footer__inner {
+  width: min(1120px, calc(100% - clamp(24px, 5vw, 64px)));
+}
+
+.main-shell {
+  padding-block: clamp(16px, 3vw, 32px) 40px;
+}
+
+.wallet-flow,
+.run-loading {
+  width: min(100%, 960px);
+  min-width: 0;
+  margin-inline: auto;
+  padding-block: 0 24px;
+}
+
+.wallet-run,
+.run-loading {
+  width: min(100%, 1080px);
+}
+
+.wallet-flow > .back-link {
+  margin-bottom: 16px;
+}
+
+.wallet-flow .page-header {
+  max-width: 760px;
+  margin: 0 auto 24px;
+  text-align: center;
+}
+
+.wallet-flow .page-header h1 {
+  font-size: clamp(1.65rem, 3.6vw, 2.6rem);
+  overflow-wrap: anywhere;
+}
+
+.wallet-flow .page-header p {
+  max-width: 64ch;
+  margin-inline: auto;
+  margin-bottom: 0;
+}
+
+.wallet-form,
+.wallet-review,
+.wallet-json-review,
+#wallet-prep {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.wallet-flow :is(.button, summary, .mono) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wallet-mode label { min-width: 0; }
+.flow-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.flow-steps > * { min-width: 0; text-align: center; }
+
+.wallet-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 860px);
+  margin: 0 auto 16px;
+  text-align: center;
+}
+
+.wallet-summary > * { min-width: 0; padding: 14px; }
+.wallet-summary strong { font-size: clamp(1.25rem, 2.5vw, 1.6rem); }
+
+.run-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  width: min(100%, 860px);
+  margin: 16px auto;
+  align-items: start;
+}
+
+.run-toolbar > .technical-details { width: 100%; margin: 0; padding: 0 14px; }
+.run-toolbar summary { min-height: 44px; align-content: center; }
+.run-toolbar > details[open] { grid-column: 1 / -1; padding-bottom: 14px; }
+.run-toolbar:has(details[open]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.run-toolbar > .button { min-width: 0; text-align: center; }
+
+#transport-note {
+  max-width: 76ch;
+  margin: 0 auto 24px;
+  text-align: center;
+}
+
+.purchase-carousel > header {
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.purchase-carousel > header p { margin: 6px 0 0; }
+.carousel-controls { justify-content: center; gap: 8px; max-width: 100%; }
+.carousel-position { min-width: 6ch; }
+.carousel-controls .new-purchases { padding-inline: 8px; font-size: .75rem; }
+
+.purchase-feed {
+  --purchase-card-height: clamp(420px, 72dvh, 680px);
+}
+
+.purchase-feed > .purchase-card,
+.purchase-feed > .purchase-skeleton {
+  flex-basis: 100%;
+  width: 100%;
+  max-width: 100%;
+  padding: clamp(16px, 3vw, 24px);
+}
+
+.purchase-feed > :only-child {
+  flex-basis: min(100%, 560px);
+  width: min(100%, 560px);
+  margin-inline: auto;
+}
+
+.purchase-card { container-type: inline-size; container-name: purchase; }
+.purchase-card .purchase-heading { flex-direction: row; flex-wrap: wrap; }
+.purchase-card .purchase-heading > :first-child { flex: 1 1 140px; }
+.purchase-card .purchase-price {
+  max-width: 100%;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  white-space: normal;
+}
+.purchase-card .purchase-price strong { overflow-wrap: anywhere; }
+.purchase-card .badge { white-space: normal; text-align: center; }
+.run-loading > .skeleton-title { margin-inline: auto; }
+
+.wallet-hero {
+  margin-inline: auto;
+  padding-block: 24px 36px;
+  text-align: center;
+}
+.wallet-hero h1 { margin-inline: auto; font-size: clamp(2rem, 5vw, 3.8rem); }
+.wallet-hero p { margin-inline: auto; }
+#app > .section-block { max-width: 960px; margin-inline: auto; }
+.wallet-hero ~ .section-block .section-heading {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.wallet-hero ~ .section-block > h2 { text-align: center; }
+.wallet-option:has(> strong:first-child) { grid-template-columns: minmax(0, 1fr); }
+.wallet-option > * { min-width: 0; overflow-wrap: anywhere; }
+.wallet-option:has(> strong:first-child) > span { grid-column: 1; }
+.app-footer__inner { justify-content: center; text-align: center; }
+
+@media (min-width: 900px) {
+  .purchase-feed > .purchase-card,
+  .purchase-feed > .purchase-skeleton {
+    flex-basis: calc((100% - 16px) / 2);
+    width: calc((100% - 16px) / 2);
+  }
+}
+
+@container purchase (max-width: 380px) {
+  .purchase-card .purchase-heading > :first-child { flex-basis: 100%; }
+  .purchase-card .purchase-price {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .purchase-card .customer-review { padding: 12px; }
+}
+
+@media (max-width: 700px) {
+  .run-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .run-toolbar > .technical-details { grid-column: 1 / -1; }
+  .run-toolbar > .button { padding-inline: 10px; font-size: .85rem; }
+  .flow-steps { gap: 6px; }
+  .flow-steps > * { padding: 8px 6px; font-size: .75rem; }
+}
+
+@media (max-width: 480px) {
+  .wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .wallet-summary > :first-child { grid-column: 1 / -1; }
+  .wallet-summary > * { padding: 10px 12px; }
+  .wallet-summary strong { margin-top: 4px; }
+  .wallet-summary span { font-size: .78rem; }
+  .wallet-flow .page-header { margin-bottom: 20px; }
+  .purchase-card .customer-review { padding: 12px; }
+}
+
+@media (max-width: 380px) {
+  .app-header__inner { gap: 12px; }
+  .brand { min-width: 0; }
+  .brand__logo { width: 96px; }
+  .offline-pill { font-size: .65rem; letter-spacing: .02em; }
+  .carousel-controls { gap: 6px; }
+}
+
+/* The global data source stays visible throughout permissions and activity. */
+.data-mode-control { display: grid; justify-items: center; gap: 2px; margin-left: 8px; }
+.data-mode-switch-row { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: #d8e4e5; }
+.data-mode-switch-row > .active { color: #fff; font-weight: 700; }
+.data-mode-switch { display: inline-flex; align-items: center; width: 54px; min-width: 54px; height: 40px; padding: 0 5px; border: 0; border-radius: 22px; background: #dce3e7; box-shadow: inset 0 1px 3px #1025331a; cursor: pointer; transition: background-color 160ms ease; }
+.data-mode-switch__thumb { width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #10253333; transform: translateX(0); transition: transform 160ms ease; }
+.data-mode-switch[aria-checked="true"] { background: #126b59; }
+.data-mode-switch[aria-checked="true"] .data-mode-switch__thumb { transform: translateX(16px); }
+.data-mode-switch:focus-visible { outline: 3px solid #428fcc; outline-offset: 3px; }
+.data-mode-status { font-size: .67rem; color: #d8e4e5; white-space: nowrap; }
+.data-source-summary { color: #126b59; font-size: .85rem; font-weight: 650; }
+@media (max-width: 640px) {
+  .app-header__inner { flex-wrap: wrap; }
+  .primary-nav { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 8px; }
+  .data-mode-control { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .data-mode-switch, .data-mode-switch__thumb { transition: none; }
 }

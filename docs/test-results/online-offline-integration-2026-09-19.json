@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-19",
+  "application_tests": {
+    "passed": 1094,
+    "failed": 0,
+    "files": 63
+  },
+  "http_cli_tests": {
+    "passed": 20,
+    "failed": 0
+  },
+  "network_guard_tests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "total_tests_passed": 1116,
+  "typecheck": "passed",
+  "build": "passed",
+  "remote": {
+    "healthz": 200,
+    "bootstrap": 401,
+    "authenticated_scenarios": "blocked_invalid_team_credential",
+    "remote_mutations": 0
+  },
+  "browser_local_api": {
+    "scen0000": {
+      "approved_chf": "20.00",
+      "purchases": 1
+    },
+    "scen0003": {
+      "approved_chf": "841.05",
+      "purchases": 11,
+      "human_approvals": 1,
+      "human_declines": 5,
+      "reservations": 0
+    },
+    "switch_persistence_and_isolation": "passed"
+  },
+  "local_restart": {
+    "port": 3210,
+    "offline_runs_preserved": 7,
+    "commitments_preserved": 24,
+    "comparison": "identical"
+  }
+}

@@ -14,6 +14,7 @@ import { SimulationService } from "./simulation/service.js";
 import { OfferExtractionService } from "./services/offer-extraction-service.js";
 import { createOpenAIOfferDecoder } from "./ai/offer-extraction.js";
 import { WalletService } from "./services/wallet-service.js";
+import type { LiveConnectionOptions } from "./services/live-configuration.js";
 
 export type LocalRuntime = {
   pack: DataPack;
@@ -33,6 +34,7 @@ export type LocalRuntimeOptions = RunServiceOptions & {
   stateDir?: string;
   outputDir?: string;
   instructionDecoder?: InstructionDecoder;
+  liveOptions?: LiveConnectionOptions;
 };
 
 async function canonicalPath(path: string): Promise<string> {
@@ -117,7 +119,7 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
   const simulations = new SimulationService(pack, policies, eventFactory, resolve(stateDir, "simulations.sqlite"), options.now);
   const offers = new OfferExtractionService(createOpenAIOfferDecoder(), resolve(stateDir, "offer-extractions.json"));
   await offers.initialize();
-  const wallet = new WalletService({pack,policies,simulations,instructions},stateDir,options.now);
+  const wallet = new WalletService({pack,policies,simulations,instructions},stateDir,options.now,1800,options.liveOptions);
   await wallet.initialize();
   return { pack, policies, scenarios, runs, instructions, simulations, offers, wallet, close: async () => { await wallet.close(); await offers.close(); simulations.close(); } };
 }

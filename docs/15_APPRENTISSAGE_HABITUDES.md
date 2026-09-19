@@ -1,5 +1,13 @@
 # Apprentissage des habitudes confirmées
 
+La version 2 ajoute la page `/wallet/profiles`, les paramètres indépendants par
+filtre, l'oubli, la suspension, la réactivation avec de nouvelles preuves et le
+feedback explicite sur les alertes supprimées. Voir la
+[validation mathématique](17_VALIDATION_MATHEMATIQUE_APPRENTISSAGE.md) et la
+[recette de livraison](18_PROFILS_ADAPTATIFS_LIVRAISON.md). La description ci-dessous
+présente le socle ; le premier représentant quotidien est désormais choisi avant
+la fenêtre temporelle pour garantir l'absence de remontée spontanée du poids.
+
 Le wallet peut maintenant utiliser les confirmations explicites du client pour
 reconnaître progressivement un appareil, un créneau horaire ou un pays marchand.
 Le résultat appris décrit une habitude confirmée, pas une probabilité de fraude.

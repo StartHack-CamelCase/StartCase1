@@ -15,6 +15,19 @@ const baseUrl = 'https://example.test';
 const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
 
+test('disabled remote mode refuses the CLI before any network request or report', async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), 'viseca-api-disabled-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await assert.rejects(execFile(process.execPath, [cli, 'reads'], {
+    cwd, env: { ...process.env, TEAM_API_KEY: token, LEASH_BASE_URL: baseUrl, VISECA_API_MODE: 'disabled' },
+  }), error => {
+    assert.match(error.stderr, /API distante désactivée/);
+    assert.equal(error.stderr.includes(token), false);
+    return true;
+  });
+  await assert.rejects(stat(join(cwd, '.viseca')), error => error.code === 'ENOENT');
+});
+
 test('authenticated JSON GET uses bearer, timeout and redirect rejection', async () => {
   const report = await requestApi({ baseUrl, apiKey: token, path: '/v1/bootstrap', fetchImpl: async (url, init) => {
     assert.equal(url, `${baseUrl}/v1/bootstrap`);

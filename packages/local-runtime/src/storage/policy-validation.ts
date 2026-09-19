@@ -142,13 +142,13 @@ export function parseHardRule(value: unknown, path = "hard_rule"): HardRule {
   };
 
   if (Object.hasOwn(object, "currency")) {
-    if (object["currency"] !== null && !CURRENCIES.has(String(object["currency"]))) {
+    if (object["currency"] !== null && (typeof object["currency"] !== "string" || !CURRENCIES.has(object["currency"]))) {
       throw new PolicyValidationIssue(`${path}.currency`, "unsupported currency");
     }
     result.currency = object["currency"] as Currency | null;
   }
   if (Object.hasOwn(object, "scope")) {
-    if (object["scope"] !== null && !SCOPES.has(String(object["scope"]))) {
+    if (object["scope"] !== null && (typeof object["scope"] !== "string" || !SCOPES.has(object["scope"]))) {
       throw new PolicyValidationIssue(`${path}.scope`, "unsupported scope");
     }
     result.scope = object["scope"] as "purchase" | "period" | null;

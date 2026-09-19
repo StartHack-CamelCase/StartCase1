@@ -14,3 +14,5 @@ export function filterMessage(id:string,code:string,observed?:unknown,expected?:
 }
 
 messages['M02_FAMILIARITY_UNPROVEN']='We could not verify a previous approved purchase from this shop. Choose a shop in your verified history, or review the familiar-shop rule in a new permission setup.';
+
+messages['M16_RECURRING_TERMS_CONFLICT']='The subscription terms contradict each other. A corrected quote is needed before continuing.';

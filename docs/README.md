@@ -30,3 +30,9 @@ Le [cadrage actuel](00_SOCLE_ET_PLACE_IA.md) et la phase A du plan remplacent la
 Un serveur sur `127.0.0.1` reste offline : il relie le navigateur aux fichiers de la machine. Le prototype n'a besoin ni de compte cloud, ni de clé Viseca, ni de base SQL, ni de modèle externe. Aucun agent d'achat n'est à construire : les scénarios fournissent les propositions d'achat.
 
 Les instructions du challenge et l'architecture sont des sources d'analyse. Les commandes d'intégration qu'elles contiennent n'ont pas été exécutées. Le raccordement à l'API Viseca reste une extension ultérieure, hors du plan actuel.
+
+## Version unifiée Offline / Online
+
+- [Guide de démarrage](../README_API.md)
+- [Matrice des tests API](18_API_TEST_MATRIX.md)
+- [Bilan final, navigateur et limite de la clé distante](19_INTEGRATION_ONLINE_OFFLINE.md)

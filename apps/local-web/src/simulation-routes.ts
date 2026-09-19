@@ -8,7 +8,7 @@ import { strictObject, requiredString, stringArray } from './request-validation.
 export function registerSimulationRoutes(app:FastifyInstance,runtime:()=>LocalRuntime,channel:HumanChannel=createHumanChannel()):void {
  const key=(request:FastifyRequest):string=>{const k=request.headers['idempotency-key'];if(typeof k!=='string'||!/^[A-Za-z0-9._:-]{8,200}$/.test(k))throw new AppError(400,'G01_IDEMPOTENCY_KEY_REQUIRED','An idempotency key is required.');return k;};
  const actor=channel.actor;
- app.get<{Querystring:{mandate_id:string}}>('/api/ui-session',async(req,reply)=>{const m=runtime().policies.getMandate(req.query.mandate_id);const detail=runtime().scenarios.get(m.source_scenario_id);return channel.issue(detail.customer.customer_id,reply);});
+ app.get<{Querystring:{mandate_id:string}}>('/api/ui-session',async(req,reply)=>{const m=runtime().policies.getMandate(req.query.mandate_id);const detail=runtime().scenarios.get(m.source_scenario_id);return channel.issue(detail.customer.customer_id,reply,req);});
  app.get<{Params:{id:string}}>('/api/mandates/:id/safety-configs',async req=>({configs:runtime().simulations.configs(req.params.id)}));
  app.post<{Params:{id:string}}>('/api/mandates/:id/safety-configs',async(req,reply)=>{strictObject(req.body??{},[]);const c=runtime().simulations.suggest(req.params.id,key(req));reply.code(201);return c;});
  app.post<{Params:{id:string}}>('/api/safety-configs/:id/confirm',async req=>{const b=strictObject(req.body,['parameters','reviewed_requirement_ids']);return runtime().simulations.confirm(req.params.id,b['parameters'],stringArray(b['reviewed_requirement_ids'],'reviewed_requirement_ids'),actor(req),key(req));});

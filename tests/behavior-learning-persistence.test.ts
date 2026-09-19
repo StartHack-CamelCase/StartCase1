@@ -8,6 +8,7 @@ import { AuthorizationEventFactory, loadDataPack } from '../packages/local-runti
 import { PolicyService } from '../packages/local-runtime/src/services/policy-service.js';
 import { PolicyFileStore } from '../packages/local-runtime/src/storage/policy-file-store.js';
 import { SimulationService } from '../packages/local-runtime/src/simulation/service.js';
+import { BehaviorProfileService } from '../packages/local-runtime/src/services/behavior-profile-service.js';
 import { hash } from '../packages/local-runtime/src/simulation/common.js';
 
 it('persists three explicit device confirmations and applies the habit after a real service restart without counting retries', async () => {
@@ -21,7 +22,7 @@ it('persists three explicit device confirmations and applies the habit after a r
   expect(pack.history.some(row => row.customer_device_id === device)).toBe(false);
 
   // Synthetic rows live only in this cloned pack; all joins and schema checks remain real.
-  const attempts: SourceAttempt[] = Array.from({ length: 4 }, (_, index) => ({
+  const attempts: SourceAttempt[] = Array.from({ length: 10 }, (_, index) => ({
     ...base,
     authorization_id: `BEHAVIOR_PERSIST_${index + 1}` as SourceAttempt['authorization_id'],
     timestamp: new Date(Date.parse(base.timestamp) + index * 86_400_000).toISOString(),
@@ -97,6 +98,46 @@ it('persists three explicit device confirmations and applies the habit after a r
     expect(fourth.run.commitments).toHaveLength(4);
     expect(service.next(run.run_id, 'habit-next-3')).toEqual(fourth);
     expect(service.get(run.run_id).commitments).toHaveLength(4);
+
+    const profiles=()=>new BehaviorProfileService(pack,service!,()=>[],()=>[],clock);
+    const current=()=>profiles().detail(base.scenario_id,'local');
+    const context={scenario_id:base.scenario_id,scope:'local' as const,filter_id:'C15' as const,context_key:device};
+    const forgotten=profiles().control({...context,action:'forget',expected_revision:current().revision},actor,'forget-device');
+    expect(forgotten.profile.habits[0]).toMatchObject({status:'forgotten',learned:false,distinct_days:0});
+    const forgottenRevision=forgotten.revision;
+    expect(profiles().control({...context,action:'forget',expected_revision:forgottenRevision-1},actor,'forget-device').revision).toBe(forgottenRevision);
+    service.close();service=undefined;
+    service=new SimulationService(pack,policies,new AuthorizationEventFactory(pack,resolve('data/schemas/authorization_event.schema.json')),sqlitePath,clock);
+    expect(current().profile.habits[0]).toMatchObject({status:'forgotten',learned:false,distinct_days:0});
+    service.answer(run.run_id,lastAnswer!.authorizationId,lastAnswer!.input,actor,lastAnswer!.key);
+    expect(current().profile.habits[0]?.distinct_days).toBe(0);
+    const confirmNext=(index:number)=>{
+      const pending=service!.next(run.run_id,`habit-next-${index}`).assessment!;
+      expect(pending.decision).toBe('step_up');
+      const question=pending.questions.find(q=>q.filter_ids.includes('C15'))!;
+      const result=service!.answer(run.run_id,pending.authorization_id,{expected_revision:pending.revision,offer_hash:pending.offer_hash,question_id:question.question_id,value:'confirm'},actor,`habit-answer-${index}`);
+      expect(result.assessment.decision).toBe('approve');return result.assessment;
+    };
+    confirmNext(4);
+    expect(current().profile.habits[0]?.distinct_days).toBe(1);
+    profiles().control({...context,action:'suspend',expected_revision:current().revision},actor,'suspend-device');
+    expect(confirmNext(5).behavior_learning?.confirmations).toEqual([]);
+    expect(current().profile.habits[0]).toMatchObject({status:'suspended',learned:false});
+    profiles().control({...context,action:'resume',expected_revision:current().revision},actor,'resume-device');
+    for(const index of [6,7,8])confirmNext(index);
+    const tenth=service.next(run.run_id,'habit-next-9').assessment!;
+    expect(tenth.decision).toBe('approve');expect(tenth.behavior_learning?.applied_filter_ids).toEqual(['C15']);
+    const beforeFeedback=current();
+    expect(beforeFeedback.metrics.unknown_suppressions).toBeGreaterThan(0);
+    const review={scenario_id:base.scenario_id,scope:'local' as const,filter_id:'C15' as const,authorization_id:tenth.authorization_id};
+    const verified=profiles().feedback({...review,verdict:'confirmed',expected_revision:beforeFeedback.revision},actor,'verify-learned-device');
+    expect(verified.metrics.verified_suppressions).toBe(1);
+    expect(verified.profile.habits[0]?.distinct_days).toBe(3); // Explicit audit feedback does not train on automatic approvals.
+    const rejected=profiles().feedback({...review,verdict:'rejected',expected_revision:verified.revision},actor,'reject-learned-device');
+    expect(rejected.metrics.contradicted_suppressions).toBe(1);
+    expect(rejected.profile.habits[0]).toMatchObject({status:'suspended',learned:false});
+    expect(()=>profiles().control({...context,action:'resume',expected_revision:beforeFeedback.revision},actor,'stale-profile-change')).toThrow('profile changed');
+    expect(()=>profiles().control({...context,action:'resume',expected_revision:rejected.revision},{...actor,customer_id:'OTHER'},'wrong-owner-change')).toThrow('customer profile');
 
     expect(pack.history).toEqual(official.history);
     expect(hash({ attempts: official.attempts, items: official.attemptItems, history: official.history })).toBe(officialHash);

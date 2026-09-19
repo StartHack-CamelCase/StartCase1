@@ -40,6 +40,20 @@ export class OperationJournal {
   }
 }
 
+/** A different action may reconcile an old request, but must never submit it. */
+export async function journaledMutation<T>(journal:OperationJournal,path:string,body:unknown,submit:(operation:PendingOperation)=>Promise<T>,recoverPrevious?:(operation:PendingOperation)=>Promise<{allowNext:boolean;message?:string}>):Promise<T>{
+  const previous=journal.pending(path);
+  if(recoverPrevious&&previous&&previous.body!==JSON.stringify(body)){
+    const recovery=await recoverPrevious(previous);
+    journal.acknowledged(previous);
+    if(!recovery.allowNext)throw new Error(recovery.message??'The previous response already finalized this purchase. Refresh its current status.');
+  }
+  const operation=journal.begin(path,'POST',body);
+  const result=await submit(operation);
+  journal.acknowledged(operation);
+  return result;
+}
+
 export function variableValue(value: unknown, currency: string | null, scope: string | null, periodDays: number | null, operator: string | null): string {
   const label = Array.isArray(value) ? value.join(", ") : String(value);
   const unit = currency !== null && label !== currency && !label.endsWith(` ${currency}`) ? ` ${currency}` : "";

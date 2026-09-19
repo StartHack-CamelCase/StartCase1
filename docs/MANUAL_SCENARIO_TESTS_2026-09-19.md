@@ -73,3 +73,20 @@ The SCEN0001 total covers the whole run. Its CHF 300 rule applies to a rolling s
 - Server regression coverage exercises atomic multi-question submissions, full rollback for incomplete evidence, unsupported question types, exact-deadline expiry, stale revisions, authenticated channels and idempotent replay. No hosted Viseca payment was executed.
 - Recorded decisions and grouped answers: [purchase-cards-2026-09-19.json](test-results/purchase-cards-2026-09-19.json).
 - Final integrated validation: **590 tests passed across 38 files**, including the concurrent learning and offline-audit additions; typecheck and build passed. Restarted port 3210 and verified the new horizontal carousel on the user's existing 11-purchase run. Its complete saved run hash was unchanged across the restart; the browser reported no JavaScript errors.
+
+## Follow-up: responsive alignment
+
+- Inspected purchase activity at 320, 390, 700, 768, 1024 and 1440 CSS pixels. The page width matched the viewport at each measured width; left and right outer margins were equal.
+- Desktop now shows two full cards; narrower layouts show one full card with horizontal navigation. The permission form and progress steps share one centered width. The opened permission JSON occupies its own row above the action buttons.
+- Visually checked the permission form and home page at 320 and 1440 pixels, including the mobile scenario heading and recent-activity titles. Statistics use a compact mobile grid. Card headers adapt to the card's own available width.
+- CSS compilation with esbuild completed without warnings. Layout checks used existing history without confirming, rejecting, re-evaluating or starting any purchase.
+- Resized 320 → 1440 → 320 after selecting the third card: it stayed selected. Repeated with the final card: desktop showed the last pair, then mobile returned to card 11, including after polling. No browser console errors. Typecheck and all 13 frontend tests passed; the frontend bundle was rebuilt and the user's existing page refreshed.
+
+## Follow-up: Cobalt permission blocker
+
+- Inspected the user's existing SCEN0003 run `SIM_838a19ad-21fc-4a40-a460-7b16a2f07562` read-only. Cobalt Coatworks CHF 245 and CHF 248 both had `M02_FAMILIARITY_UNPROVEN` with an `amend_mandate` question, alongside answerable device/burst alerts. The grouped approval guard correctly refused partial confirmation, but the screen offered no next step for the permission question.
+- An unresolved permission now displays `Permissions need review`, explains that a new permission setup is required, and links directly to that scenario with `Review permissions for a new run`. Its countdown describes request expiry rather than promising a confirmation action. Quote/service repairs also display verification-specific wording.
+- After expiry, the unresolved permission and setup link remain visible; the same-permission reassessment is omitted because it cannot resolve this condition. Ordinary expired risk reviews retain their reassessment action. Revoked runs offer no card actions.
+- The confirmed familiar-shop rule remains enforced. A simple risk confirmation cannot invent a prior purchase. No historical run, question, answer or payment decision was changed during verification.
+- Validation: all 15 frontend tests passed, including mixed permission/risk questions, expired Cobalt, local/live rendering, revoked state and ordinary risk reassessment. Typecheck and whitespace validation passed.
+- Refreshed the user's run after the coordinated frontend build. Both Cobalt cards now show the missing-history explanation and the SCEN0003 setup link. Scrolled the CHF 245 card to verify that the button is visible and reachable; the approved total remains CHF 841.05, with all 11 proposals preserved. Browser console: no errors.

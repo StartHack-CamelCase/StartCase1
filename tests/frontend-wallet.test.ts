@@ -1,7 +1,8 @@
 import {describe,expect,it} from 'vitest';
 import {advanceServerClock,retryEligible,collectLiveAnswers,parsePermissionJson,confirmationSeconds,countdownText,pendingPurchaseOperation,hasConflictingPurchaseOperation} from '../apps/local-web/web/wallet-ui.js';
 import {OperationJournal} from '../apps/local-web/web/operation-state.js';
-import {renderReview} from '../apps/local-web/web/wallet-run-view.js';
+import {renderReview,renderPurchaseCard} from '../apps/local-web/web/wallet-run-view.js';
+import type {WalletRunView} from '../packages/contracts/src/wallet.js';
 import type {Assessment,Question} from '../packages/contracts/src/simulation.js';
 describe('wallet retry eligibility',()=>{
  it('allows local expired and technical holds',()=>{expect(retryEligible({execution_state:'expired',decision:null} as never,'local')).toBe(true);expect(retryEligible({execution_state:'technical_hold',decision:null} as never,'local')).toBe(true);});
@@ -52,10 +53,31 @@ it.each(['local','live'])('shows one confirmation for several risks and evidence
  expect(html.match(/data-review-action="decline"/g)).toHaveLength(1);expect(html).toContain('data-expires-at="2026-09-19T12:02:00Z"');
 });
 it('does not offer an ineffective partial approval when a rule needs repair or amendment',()=>{
- const html=renderReview(pending([question('device','confirm_risk'),question('history','amend_mandate')]),'AUTH','local');
+ const html=renderReview(pending([question('device','confirm_risk'),question('history','amend_mandate')]),'AUTH','local',false,'SCEN0003');
+ expect(html).toContain('Permissions need review');expect(html).toContain('href="/wallet/new?scenario_id=SCEN0003"');expect(html).toContain('Review permissions for a new run');
+ expect(html).not.toContain('Time left to confirm');expect(html).toContain('data-review-type="resolution"');expect(html).toContain('Time until this request expires');
  expect(html).not.toContain('data-review-action="approve"');expect(html).toContain('data-review-action="decline"');
 });
 it('removes all review controls for expired, approved and revoked purchases',()=>{
  for(const state of ['expired','approved','cancelled'] as const)expect(renderReview({...pending([question('device','confirm_risk')]),execution_state:state},'AUTH','local')).toBe('');
  expect(renderReview(pending([question('device','confirm_risk')]),'AUTH','local',true)).toBe('');
+});
+
+it('keeps the missing permission actionable after Cobalt expires instead of offering the same ineffective reassessment',()=>{
+ const assessment={...pending([question('device','confirm_risk'),question('history','amend_mandate')]),execution_state:'expired',lock:null} as Assessment;
+ const purchase:WalletRunView['purchases'][number]={authorization_id:'AUTH',merchant_id:'ME0058',merchant_name:'Cobalt Coatworks',description:'Coat',amount_chf:'245',currency:'CHF',items:[],assessment};
+ for(const mode of ['local','live']){
+  const html=renderPurchaseCard(purchase,mode,'completed','SCEN0003');
+  expect(html).toContain('Review history');expect(html).toContain('Review permissions for a new run');
+  expect(html).not.toContain('retry-purchase');expect(html).not.toContain('data-review-action="approve"');expect(html).not.toContain('consent-countdown');
+ }
+ const revoked=renderPurchaseCard(purchase,'local','revoked','SCEN0003');
+ expect(revoked).not.toContain('Review permissions for a new run');
+ const riskOnly=renderPurchaseCard({...purchase,assessment:{...assessment,questions:[question('device','confirm_risk')]}},'local','completed','SCEN0003');
+ expect(riskOnly).toContain('retry-purchase');expect(riskOnly).not.toContain('Review permissions for a new run');
+});
+it('does not describe a quote repair as either an available confirmation or a permission amendment',()=>{
+ const html=renderReview(pending([question('quote','replace_quote'),question('device','confirm_risk')]),'AUTH','local',false,'SCEN0003');
+ expect(html).toContain('A corrected offer is needed');expect(html).toContain('Verification needed');
+ expect(html).not.toContain('data-review-action="approve"');expect(html).not.toContain('Review permissions for a new run');
 });

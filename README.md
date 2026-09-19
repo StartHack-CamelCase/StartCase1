@@ -61,11 +61,22 @@ pnpm dev:local
 
 ## Validation et CLI
 
-Pour expérimenter avec l’API hébergée dans une copie indépendante, voir le
-[plan de test API parallèle](docs/14_PLAN_TEST_API_PARALLELE.md). `npm run api:sandbox`
-copie les sources actuelles dans `.parallel/viseca-api/`, avec un `.env.local`
-privé pour `TEAM_API_KEY`, son propre stockage et le port 3212. Le laboratoire
-[apps/api-lab](apps/api-lab/README.md) fournit les GET, POST, PATCH et DELETE explicites.
+Les parcours **Offline** et **Online** sont maintenant réunis dans la même application.
+Le switch dans la barre supérieure choisit les données, les activités, les brouillons
+et les profils affichés. Offline utilise le pack CSV; Online traite les demandes
+reçues de l’API avec le même moteur M/C/G. Les profils d’apprentissage restent séparés.
+
+Renseigner `TEAM_API_KEY` et `LEASH_BASE_URL` dans `.env.local` (voir
+[.env.example](.env.example)), puis lancer `npm run build` et `npm run start:local`.
+Le fichier privé reste exclu de Git. `npm run api:demo` ouvre une démonstration
+isolée sur le port 3212 avec une API locale et bloque les appels distants.
+
+Voir [le guide de la version fusionnée](README_API.md),
+[la matrice de validation API](docs/18_API_TEST_MATRIX.md) et
+[le bilan d’intégration](docs/19_INTEGRATION_ONLINE_OFFLINE.md).
+Le laboratoire [apps/api-lab](apps/api-lab/README.md) conserve ses GET, POST,
+PATCH et DELETE explicites. La copie `.parallel/viseca-api` reste une archive
+locale ignorée par Git; elle n’est plus nécessaire au fonctionnement.
 
 ```bash
 pnpm typecheck
@@ -80,7 +91,7 @@ pnpm offline:inspect-all
 
 ## Périmètre actuel
 
-L’inspection historique est conservée. Un mode **simulation locale M/C/G** ajoute les 50 contrôles, une configuration relue et confirmée, les questions humaines typées, les locks et un registre SQLite transactionnel. Le worker **Viseca** est distinct ; il utilise le même moteur et compte uniquement les approbations acceptées par la plateforme. Son parcours hébergé reste à exécuter avec les accès du projet. Voir [le guide d’usage](docs/12_USAGE_SIMULATION_ET_VISECA.md).
+L’inspection historique est conservée. Un mode **simulation locale M/C/G** ajoute les 50 contrôles, une configuration relue et confirmée, les questions humaines typées, les locks et un registre SQLite transactionnel. Le worker **Viseca** est distinct ; il utilise le même moteur et compte uniquement les approbations acceptées par la plateforme. Le parcours complet est validé sur le simulateur HTTP local; la recette hébergée reste bloquée tant que la clé d’équipe reçoit HTTP 401. Voir [le guide d’usage](docs/12_USAGE_SIMULATION_ET_VISECA.md).
 
 ## Décoder une instruction
 

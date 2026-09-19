@@ -6,6 +6,7 @@ import {
   type ScenarioId,
 } from "../../../packages/contracts/src/index.js";
 import type { LocalRuntime } from "../../../packages/local-runtime/src/runtime.js";
+import type { HumanChannel } from "./human-channel.js";
 import { runId, runtimeAuthorizationId } from "../../../packages/local-runtime/src/services/run-service.js";
 import { scenarioId } from "../../../packages/local-runtime/src/services/scenario-service.js";
 import { IdempotencyStore, type CachedHttpResponse } from "./idempotency.js";
@@ -24,7 +25,22 @@ export function registerApiRoutes(
   app: FastifyInstance,
   runtime: RuntimeProvider,
   idempotency: IdempotencyStore,
+  channel?: HumanChannel,
 ): void {
+  const requireOwner = (request: FastifyRequest, sourceScenario: string): void => {
+    // Preserve the standalone offline inspector contract. Once connected, all
+    // permission changes also require the wallet's customer-bound session.
+    if (!runtime().wallet.options().live_configured) return;
+    const actor = channel?.actor(request);
+    if (actor?.customer_id !== runtime().wallet.actorCustomer(sourceScenario)) throw new AppError(403, "human_session_required", "Open the matching customer confirmation page before changing these permissions.");
+  };
+  app.addHook('preHandler', async request => {
+    const path = request.url.split('?')[0]!;
+    const draft = path.match(/^\/api\/mandate-drafts\/([^/]+)\/confirm$/);
+    const mandate = path.match(/^\/api\/mandates\/([^/]+)$/);
+    if (draft && request.method === 'POST') requireOwner(request, runtime().policies.getDraft(draftId(decodeURIComponent(draft[1]!))).source_scenario_id);
+    if (mandate && ['PATCH', 'DELETE'].includes(request.method)) requireOwner(request, runtime().policies.getMandate(mandateId(decodeURIComponent(mandate[1]!))).source_scenario_id);
+  });
   app.get("/api/scenarios", async () => ({ scenarios: runtime().scenarios.list() }));
 
   app.get<{ Params: { scenarioId: string } }>("/api/scenarios/:scenarioId/instruction-decoding", async (request) =>

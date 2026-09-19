@@ -1,3 +1,4 @@
+import { unsupportedLocalClauses } from '../simulation/instruction-coverage.js';
 import type { DataPack } from '../../../contracts/src/data.js';
 import type { InstructionDecoding } from '../../../contracts/src/instruction-decoding.js';
 import type { HardRule, MandateRecord } from '../../../contracts/src/policy.js';
@@ -70,27 +71,58 @@ function categoryRequirementCovered(requirement:InstructionDecoding['unmapped_re
  return false;
 }
 
+/** No neighboring parameter proves that a decoded exclusion was executed. */
+function compileDecodedVariable(v:InstructionDecoding['variables'][number],p:SafetyParameters):boolean {
+ if(v.field==='authorization.billing_amount_chf')return applyOrderAmountRule(p,v as HardRule);
+ if(v.field==='context.approved_spend_in_period_chf')return applyOrderAmountRule(p,{...v,field:'authorization.billing_amount_chf',scope:'period'} as HardRule);
+ if(v.scope==='period'||v.currency)return false;
+ const field=({'authorization.currency':'allowed_currencies','authorization.merchant.merchant_id':'allowed_merchant_ids','authorization.merchant.merchant_country':'allowed_merchant_countries','authorization.items[].item_category':'allowed_item_categories'} as const)[v.field as 'authorization.currency'|'authorization.merchant.merchant_id'|'authorization.merchant.merchant_country'|'authorization.items[].item_category'];
+ const values=typeof v.value==='string'?[v.value]:Array.isArray(v.value)&&v.value.every(value=>typeof value==='string')?v.value:null;
+ if(field&&values?.length&&(v.operator==='='||v.operator==='in')){p[field]=p[field]===null?values:p[field]!.filter(value=>values.includes(value));return true;}
+ if(field==='allowed_merchant_ids'&&values?.length&&(v.operator==='!='||v.operator==='not_in')){p.blocked_merchant_ids=[...new Set([...p.blocked_merchant_ids,...values])];return true;}
+ if(v.field==='authorization.order_cancellable'&&v.operator==='='&&v.value==='true'){p.require_cancellation=true;return true;}
+ if(v.field==='authorization.items[].quantity'&&v.operator==='<='&&typeof v.value==='number'&&Number.isSafeInteger(v.value)&&v.value>0){p.max_quantity_per_order=Math.min(p.max_quantity_per_order??v.value,v.value);return true;}
+ if(v.field==='authorization.fulfillment_method'&&v.operator==='='&&typeof v.value==='string'&&(!p.fulfillment_method||p.fulfillment_method===v.value)){p.fulfillment_method=v.value;return true;}
+ return false;
+}
+/** Every meaningful word must belong to the represented requirement. A supported
+ * noun such as size or shipping cannot hide an additional qualifier. */
+function simpleRequirementCovered(r:InstructionDecoding['unmapped_requirements'][number],instruction:string,p:SafetyParameters):boolean {
+ if(!instruction.includes(r.source_excerpt))return false;
+ const text=r.description.normalize('NFKC').toLowerCase().trim().replace(/[.]$/,'');
+ const only=(terms:RegExp)=>text.replace(terms,'').replace(/[\d\s.,:;()'’–-]/g,'')==='';
+ const base='the|a|an|of|for|in|is|are|be|must|should|required|requested|requirement|order|purchase|product|item|items|shoe|shoes|and|with|have|has|to';
+ const attribute=(name:'size'|'inches'|'color',pattern:RegExp,words:string)=>{
+  const configured=p.attributes.find(a=>a.name===name);if(!configured||!pattern.test(text))return false;
+  const values=name==='color'?configured.values:(text.match(/\d+(?:[.,]\d+)?/g)??[]).map(value=>value.replace(',','.'));
+  return values.length>0&&values.every(value=>configured.values.includes(value))&&only(new RegExp(`\\b(?:${base}|${words}|${name==='color'?configured.values.join('|'):''})\\b`,'g'));
+ };
+ if(attribute('size',/\bsize\b/,'size|sized'))return true;
+ if(attribute('inches',/inch|screen|dimension/,'inch|inches|screen|dimension|dimensions|monitor'))return true;
+ if(attribute('color',/colou?r/,'color|colour|colored|coloured'))return true;
+ if(/deliver|shipping/.test(text)&&p.fulfillment_method==='delivery'&&only(new RegExp(`\\b(?:${base}|delivery|delivered|deliver|shipping|shipped|shipping)\\b`,'g')))return true;
+ if(/return/.test(text)&&/return/i.test(instruction)&&only(new RegExp(`\\b(?:${base}|return|returns|returned|returnable|can|within|days|day|at|least|or|more|minimum|duration|window)\\b`,'g'))){const days=text.match(/\d+/g);return !days?.length||p.min_return_days!==null&&days.every(value=>p.min_return_days!>=Number(value));}
+ if(/^(?:do not add anything (?:i|the user) did not ask for|no (?:unrequested )?(?:extras|add-ons)|only the (?:chosen|selected) product)$/.test(text)&&p.no_extras)return true;
+ if(p.watch_devices&&/^(?:pause anything that looks like someone other than me is driving the session|pause the session if it appears another person is driving it or controlling the session|pause if (?:the )?session seems to be controlled by someone other than the cardholder)$/.test(text))return true;
+ if(p.no_extras&&/^do not include any extra items or changes beyond the requested purchase$/.test(text))return true;
+ if(p.product_type==='monitor'&&p.allowed_item_ids?.length===1&&/^requested product size is [0-9]+-inch monitor; the specific model is the one the cardholder chose$/.test(text)&&p.attributes.some(a=>a.name==='inches'&&a.values.includes(text.match(/[0-9]+/)![0])))return true;
+ if(/^(?:the )?(?:chosen|selected) (?:[0-9]+-inch )?monitor(?: (?:must|should) be purchased)?$/.test(text)&&p.product_type==='monitor'&&p.allowed_item_ids?.length===1)return true;
+ return false;
+}
+
 export function preparePermissions(pack:DataPack, instruction:string, decoding:InstructionDecoding|null, now:string):Pick<WalletPreparation,'config'|'permissions'|'clarifications'|'warnings'> {
  const proposed=suggestConfig({instruction,mandate_id:'PREPARATION',version:1,hard_rules:[],interpretation:decoding?{instruction_decoding:decoding}:{}} as unknown as MandateRecord,now);
  const p=proposed.parameters;
- // Interpret only locally validated fields. Technical IDs never come from the model.
- for(const v of decoding?.variables??[]){if(v.status!=='present')continue;
-  if(v.field==='authorization.billing_amount_chf')applyOrderAmountRule(p,v as HardRule);
-  if(v.field==='context.approved_spend_in_period_chf'&&v.operator==='<='&&typeof v.value==='number'&&v.period_days)p.rolling_budget={days:v.period_days,limit_chf:String(v.value)};
-  if(v.field==='authorization.currency'&&(v.operator==='='||v.operator==='in'))p.allowed_currencies=Array.isArray(v.value)?v.value:typeof v.value==='string'?[v.value]:null;
-  const listField=({'authorization.merchant.merchant_id':'allowed_merchant_ids','authorization.merchant.merchant_country':'allowed_merchant_countries','authorization.items[].item_category':'allowed_item_categories'} as const)[v.field as 'authorization.merchant.merchant_id'];
-  if(listField&&(v.operator==='='||v.operator==='in')&&(typeof v.value==='string'||Array.isArray(v.value)))p[listField]=Array.isArray(v.value)?v.value:[v.value];
-  if(v.field==='authorization.order_cancellable'&&v.value==='true')p.require_cancellation=true;
-  if(v.field==='authorization.items[].quantity'&&v.operator==='<='&&typeof v.value==='number'&&Number.isSafeInteger(v.value)&&v.value>0)p.max_quantity_per_order=v.value;
-  if(v.field==='authorization.fulfillment_method'&&v.operator==='='&&typeof v.value==='string')p.fulfillment_method=v.value;
-  if(v.field==='authorization.merchant.merchant_country'&&(v.operator==='='||v.operator==='in'))p.allowed_merchant_countries=Array.isArray(v.value)?v.value:typeof v.value==='string'?[v.value]:null;
- }
+ // Record coverage of each complete field/operator/value constraint at compilation time.
+ const compiled=new Set<InstructionDecoding['variables'][number]>();
+ for(const variable of decoding?.variables??[])if(variable.status==='present'&&compileDecodedVariable(variable,p))compiled.add(variable);
  if(/someone (?:else|other than me)|session|driving the session/i.test(instruction)){p.watch_devices=true;p.burst_threshold=3;p.historical_time_review=true;p.unusual_country=true;}
  const color=instruction.match(/\b(black|white|blue|red|green|grey|gray|pink|yellow)\b/i);if(color&&/shoe|shirt|clothing|jacket|trouser/i.test(instruction)&&!p.attributes.some(a=>a.name==='color'))p.attributes.push({name:'color',values:[color[1]!.toLowerCase()],unit:null});
  // This convention is visible in the permission review and accepted with the policy.
  p.domestic_country='CH';
  p.duplicate_hours=24;
  const clarifications:WalletClarification[]=[];
+ if(!decoding)for(const [index,clause] of unsupportedLocalClauses(instruction).entries()){clarifications.push({key:`unresolved:local:${index}`,label:`This sentence needs a supported rule before starting: ${clause}`,type:'text',required:true,value:''});const requirement=proposed.requirements.find(r=>r.source_excerpt===clause&&r.filter_ids.includes('C03'));if(requirement)requirement.description=`Unsupported instruction: ${clause}`;}
  // Propose numeric comparison without inventing an EU/UK/US conversion.
  if(p.attributes.some(a=>a.name==='size'&&a.unit===null))p.numeric_size_convention='shared_numeric';
  // Resolve a catalogue ID only when the instruction's product attributes identify one entry.
@@ -100,7 +132,15 @@ export function preparePermissions(pack:DataPack, instruction:string, decoding:I
  }
  const warnings:string[]=[];
  for(const v of decoding?.variables??[]){if(v.status!=='present')continue;
-  const mapped=merchantHistoryCovered(v,instruction,p)||v.field==='authorization.billing_amount_chf'&&applyOrderAmountRule(structuredClone(p),v as HardRule)||v.field==='context.approved_spend_in_period_chf'&&v.operator==='<='&&Boolean(v.period_days)||v.field==='authorization.currency'&&Boolean(p.allowed_currencies)||v.field==='authorization.merchant.merchant_country'&&Boolean(p.allowed_merchant_countries)||v.field==='authorization.merchant.merchant_id'&&Boolean(p.allowed_merchant_ids)||v.field==='authorization.items[].item_category'&&Boolean(p.allowed_item_categories)||v.field==='authorization.items[].quantity'&&p.max_quantity_per_order!==null||v.field==='authorization.fulfillment_method'&&Boolean(p.fulfillment_method)||v.field==='authorization.order_returnable'&&v.value==='true'&&/return|retour/i.test(instruction)||v.field==='authorization.order_cancellable'&&v.value==='true'&&p.require_cancellation||v.field==='mandate.uncertainty_policy'&&v.value==='ask'||v.field==='authorization.merchant.merchant_category'&&Boolean(p.allowed_merchant_categories)||v.field==='authorization.items[].item_name'&&(Boolean(p.product_type)||Boolean(p.allowed_item_categories)&&/^(?:(?:ordinary|household|weekly) )?(?:groceries|grocery (?:item|items)|clothing)$/i.test(String(v.value)))||v.field==='authorization.purchase_description'&&p.watch_devices&&/session|someone/i.test(String(v.value));
+  const plainEquality=(v.operator==='='||v.operator===null)&&v.scope!=='period'&&!v.currency;
+  const mapped=compiled.has(v)||merchantHistoryCovered(v,instruction,p)||plainEquality&&(
+   v.field==='authorization.order_returnable'&&v.value==='true'&&/return|retour/i.test(instruction)||
+   v.field==='mandate.uncertainty_policy'&&v.value==='ask'||
+   v.field==='authorization.merchant.merchant_category'&&typeof v.value==='string'&&(p.allowed_merchant_categories?.includes(v.value)||/^(?:a )?specialist sports retailer$/i.test(v.value)&&p.allowed_merchant_categories?.length===1&&p.allowed_merchant_categories[0]==='sporting_goods')||
+   v.field==='authorization.items[].item_category'&&typeof v.value==='string'&&(p.allowed_item_categories?.includes(v.value)||/^(?:(?:ordinary|household|weekly) )?grocery items?$/i.test(v.value)&&p.allowed_item_categories?.length===1&&p.allowed_item_categories[0]==='groceries')||
+   v.field==='authorization.items[].quantity'&&v.value===1&&p.max_quantity_per_order===1||
+   v.field==='authorization.items[].item_name'&&(p.product_type==='monitor'&&/^(?:[0-9]+(?:[.,][0-9]+)?[- ]inch )?monitor$/i.test(String(v.value))||p.product_type==='road_running_shoes'&&/^road[- ]running shoes$/i.test(String(v.value))||Boolean(p.allowed_item_categories)&&/^(?:(?:ordinary|household|weekly) )?(?:groceries|grocery (?:item|items)|clothing)$/i.test(String(v.value)))||
+   v.field==='authorization.purchase_description'&&p.watch_devices&&/^(?:pause anything that looks like )?someone other than me is driving the session[.]?$/i.test(String(v.value)));
   if(!mapped)clarifications.push({key:`unresolved:${v.field}`,label:`Unsupported decoded constraint: ${v.field} = ${JSON.stringify(v.value)}.`,type:'text',required:true,value:'',diagnostic:{field:v.field,decoded_value:v.value,source_excerpt:v.source_excerpt,reason:'This decoded field and value have no executable permission mapping.'}});
  }
 
@@ -116,7 +156,7 @@ export function preparePermissions(pack:DataPack, instruction:string, decoding:I
   const monetaryText=p.allowed_item_categories?.length===1&&p.allowed_item_categories[0]==='groceries'&&p.max_quantity_per_order===1?r.description.replace(/\b(?:one|a single|1) (?:ordinary )?grocery item\b/ig,''):r.description;
   const monetaryOnly=/CHF|amount|price|cost|minimum|maximum|bound/i.test(monetaryText)&&monetaryText.toLowerCase().replace(/\b(?:the|purchase|buy|pay|order|per|amount|price|cost|minimum|maximum|lower|upper|bound|boundary|must|be|is|at|least|most|of|between|and|no|more|less|than|exactly|equal|to|chf|a|an|francs|swiss|total|for)\b/g,'').replace(/[\d\s.,;:()<>=!\-]/g,'')==='';
   const amountCovered=monetaryOnly&&(describedBounds.min_order_chf!==null||describedBounds.max_order_chf!==null)&&(describedBounds.min_order_chf===null||(bounds.min_order_chf!==null&&new Decimal(bounds.min_order_chf).gte(describedBounds.min_order_chf)&&p.min_order_chf!==null&&new Decimal(p.min_order_chf).gte(describedBounds.min_order_chf)))&&(describedBounds.max_order_chf===null||(bounds.max_order_chf!==null&&new Decimal(bounds.max_order_chf).lte(describedBounds.max_order_chf)&&p.max_order_chf!==null&&new Decimal(p.max_order_chf).lte(describedBounds.max_order_chf)));
-  const covered=merchantHistoryRequirementCovered(r,instruction,p)||categoryRequirementCovered(r,instruction,p)||amountCovered||groceryQuantityCovered||(/size/.test(text)&&p.attributes.some(a=>a.name==='size'))||(/inch|screen|dimension/.test(text)&&p.attributes.some(a=>a.name==='inches'))||(/return/.test(text)&&(/return/i.test(instruction)))||(/session|someone|device|suspici/.test(text)&&p.watch_devices)||(/extra|add.on|unrequested/.test(text)&&p.no_extras)||(/chosen|chose|selected/.test(text)&&p.product_type==='monitor')||(/delivery|shipping/.test(text)&&p.fulfillment_method==='delivery'&&!/before|deadline|date/.test(text))||(/colou?r/.test(text)&&p.attributes.some(a=>a.name==='color'));
+  const covered=merchantHistoryRequirementCovered(r,instruction,p)||categoryRequirementCovered(r,instruction,p)||amountCovered||groceryQuantityCovered||simpleRequirementCovered(r,instruction,p);
   if(!covered)clarifications.push({key:`unresolved:requirement:${i}`,label:`Unsupported decoded requirement: ${r.description}`,type:'text',required:true,value:'',diagnostic:{field:null,decoded_value:r.description,source_excerpt:r.source_excerpt,reason:'No executable rule covers this decoded requirement.'}});
  }
  const ambiguous=(decoding?.variables??[]).filter(v=>v.status==='ambiguous'&&!(v.field==='authorization.items[].item_name'&&p.product_type===null&&p.allowed_item_categories!==null&&/grocery item|groceries|clothing/i.test(v.source_excerpt??'')&&/(?:does not|doesn't|not) specify|not specified|unspecified|no specific|no particular/i.test(v.note??'')&&/item name|specific (?:item|product)|particular (?:item|product)/i.test(v.note??'')));
@@ -127,6 +167,7 @@ export function preparePermissions(pack:DataPack, instruction:string, decoding:I
 }
 export function applyParameters(prep:WalletPreparation, value:unknown,pack:DataPack):SafetyParameters {
  if(!prep.config)throw new AppError(409,'permission_review_not_ready','Wait until the permissions are ready.');
+ if(prep.decoding===null&&unsupportedLocalClauses(prep.instruction??prep.config.instruction).length)throw new AppError(422,'instruction_needs_clarification','Please edit the unclear instruction and decode it again before confirming.');
  const unresolved=prep.clarifications.filter(c=>c.key.startsWith('unresolved:'));
  if(unresolved.length){const first=unresolved[0]!;throw new AppError(422,'instruction_needs_clarification',`Cannot start: ${first.label}`,{unresolved:unresolved.map(c=>c.diagnostic??{field:null,decoded_value:c.value,source_excerpt:null,reason:c.label})});}
  const p=validateParameters(value);
@@ -172,4 +213,9 @@ export function hardRulesFromParameters(p:SafetyParameters):HardRule[]{
  if(p.rolling_budget)out.push({field:'authorization.billing_amount_chf',operator:'<=',value:Number(p.rolling_budget.limit_chf),currency:'CHF',scope:'period',period_days:p.rolling_budget.days});
  if(p.allowed_currencies!==null)out.push({field:'authorization.currency',operator:'in',value:p.allowed_currencies});
  return out;
+}
+
+/** Compatibility for archived review callers; current UI submits the complete parameters. */
+export function applyClarifications(prep:WalletPreparation,values:Record<string,unknown>,pack:DataPack):SafetyParameters {
+ return applyParameters(prep,{...prep.config?.parameters,...values},pack);
 }
